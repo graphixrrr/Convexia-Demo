@@ -656,15 +656,21 @@ export default function Home() {
   const { strokeDasharray, strokeDashoffset } = calculateStrokeDasharray(56, trialData.riskScore)
 
   const fetchRiskAnalysis = async () => {
+    console.log('Refresh button clicked - starting fetch...')
     setIsLoading(true)
     try {
+      console.log('Fetching from /api/risk-analysis...')
       const response = await fetch('/api/risk-analysis')
+      console.log('Response received:', response.status)
       const data = await response.json()
+      console.log('Data received:', data)
       setApiData(data)
+      console.log('API data updated successfully')
     } catch (error) {
       console.error('Failed to fetch risk analysis:', error)
     } finally {
       setIsLoading(false)
+      console.log('Fetch completed')
     }
   }
 
