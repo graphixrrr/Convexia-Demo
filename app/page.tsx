@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronUp, RefreshCw, Edit3, Save, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // Data for the application
@@ -627,6 +627,59 @@ export default function Home() {
   const [stressLevel, setStressLevel] = useState(50)
   const [scenarioType, setScenarioType] = useState('Base Case')
   const [isSimulationRunning, setIsSimulationRunning] = useState(false)
+  const [isEditingMolecule, setIsEditingMolecule] = useState(false)
+  
+  // Molecule information state
+  const [moleculeInputs, setMoleculeInputs] = useState({
+    geneSymbol: trialData.molecularDetails.geneSymbol,
+    uniprotId: trialData.molecularDetails.uniprotId,
+    structureType: trialData.molecularDetails.structureType,
+    mechanism: trialData.molecularDetails.mechanism,
+    route: trialData.molecularDetails.route,
+    indication: trialData.indication,
+    phase: trialData.phase,
+    type: trialData.type
+  })
+  
+  // Dynamic risk calculations based on molecule inputs
+  const calculateDynamicRiskScore = () => {
+    let baseRisk = 72
+    let riskModifier = 0
+    
+    // Gene symbol complexity impact
+    if (moleculeInputs.geneSymbol.length > 6) riskModifier += 5
+    if (moleculeInputs.geneSymbol.includes('PDE')) riskModifier -= 3
+    
+    // Structure type impact
+    if (moleculeInputs.structureType === 'Small molecule') riskModifier -= 2
+    if (moleculeInputs.structureType === 'Biologic') riskModifier += 8
+    if (moleculeInputs.structureType === 'Antibody') riskModifier += 12
+    
+    // Mechanism complexity
+    if (moleculeInputs.mechanism.includes('dual') || moleculeInputs.mechanism.includes('multiple')) riskModifier += 5
+    if (moleculeInputs.mechanism.includes('inhibitor')) riskModifier -= 2
+    
+    // Route of administration
+    if (moleculeInputs.route === 'Inhalation') riskModifier += 3
+    if (moleculeInputs.route === 'Oral') riskModifier -= 5
+    if (moleculeInputs.route === 'Intravenous') riskModifier += 8
+    
+    // Indication complexity
+    if (moleculeInputs.indication.includes('COPD')) riskModifier += 2
+    if (moleculeInputs.indication.includes('cancer') || moleculeInputs.indication.includes('oncology')) riskModifier += 15
+    
+    // Phase impact
+    if (moleculeInputs.phase === 'Phase I') riskModifier -= 10
+    if (moleculeInputs.phase === 'Phase II') riskModifier -= 5
+    if (moleculeInputs.phase === 'Phase III') riskModifier += 0
+    if (moleculeInputs.phase === 'Phase IV') riskModifier -= 8
+    
+    return Math.max(0, Math.min(100, baseRisk + riskModifier))
+  }
+  
+  const dynamicRiskScore = calculateDynamicRiskScore()
+  const dynamicRiskLevel = dynamicRiskScore >= 70 ? 'High Risk' : dynamicRiskScore >= 40 ? 'Medium Risk' : 'Low Risk'
+  
   const [simulationResults, setSimulationResults] = useState({
     enrollmentProgress: [0, 12, 25, 38, 50, 50],
     dropoutRates: [0, 3, 7, 12, 17, 17],
@@ -635,8 +688,16 @@ export default function Home() {
     enrollmentRate: 87.3,
     dropoutRate: 22.7,
     costEfficiency: 94.2,
-    riskScore: 62
+    riskScore: dynamicRiskScore
   })
+
+  // Update simulation results when molecule inputs change
+  useEffect(() => {
+    setSimulationResults(prev => ({
+      ...prev,
+      riskScore: dynamicRiskScore
+    }))
+  }, [dynamicRiskScore])
 
   const toggleComponent = (name: string) => {
     setExpandedComponents(prev => ({
@@ -653,7 +714,7 @@ export default function Home() {
     return { strokeDasharray, strokeDashoffset }
   }
 
-  const { strokeDasharray, strokeDashoffset } = calculateStrokeDasharray(56, trialData.riskScore)
+  const { strokeDasharray, strokeDashoffset } = calculateStrokeDasharray(56, dynamicRiskScore)
 
   const fetchRiskAnalysis = async () => {
     console.log('Refresh button clicked - starting fetch...')
@@ -843,12 +904,26 @@ export default function Home() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">OHT-202</h2>
-                    <p className="text-sm text-gray-600">COPD with chronic bronchitis • Phase III • Inhaled Small Molecule</p>
+                    <p className="text-sm text-gray-600">{moleculeInputs.indication} • {moleculeInputs.phase} • {moleculeInputs.type}</p>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col items-center">
-                      <div className="text-3xl font-bold text-gray-900">72</div>
-                      <div className="px-2 py-1 bg-gray-800 text-white text-xs font-medium rounded-full">High Risk</div>
+                      <div className="text-3xl font-bold text-gray-900 transition-all duration-300">
+                        {dynamicRiskScore}
+                        {dynamicRiskScore !== 72 && (
+                          <span className="text-sm text-blue-600 ml-1">
+                            ({dynamicRiskScore > 72 ? '+' : ''}{dynamicRiskScore - 72})
+                          </span>
+                        )}
+                      </div>
+                      <div className={cn(
+                        "px-2 py-1 text-xs font-medium rounded-full transition-all duration-300",
+                        dynamicRiskLevel === 'High Risk' ? 'bg-red-100 text-red-800' :
+                        dynamicRiskLevel === 'Medium Risk' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
+                      )}>
+                        {dynamicRiskLevel}
+                      </div>
                     </div>
                     <button
                       onClick={() => setExpandedTrial(!expandedTrial)}
@@ -883,15 +958,164 @@ export default function Home() {
                 <div className="p-6 pt-0 border-t border-gray-100">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
-                      <h3 className="font-semibold text-gray-900 mb-3">Molecular Details</h3>
-                      <div className="space-y-2 text-sm">
-                        <div><span className="font-medium">Gene Symbol:</span> PDE3A</div>
-                        <div><span className="font-medium">UniProt ID:</span> P27815</div>
-                        <div><span className="font-medium">Structure Type:</span> Small molecule</div>
-                        <div><span className="font-medium">Mechanism:</span> PDE3/4 inhibitor</div>
-                        <div><span className="font-medium">Route:</span> Inhalation</div>
-                        <div><span className="font-medium">Selected CRO:</span> Medpace Holdings Inc</div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-900">Molecular Details</h3>
+                        <button
+                          onClick={() => setIsEditingMolecule(!isEditingMolecule)}
+                          className="flex items-center gap-2 px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors"
+                        >
+                          {isEditingMolecule ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                          {isEditingMolecule ? 'Cancel' : 'Edit'}
+                        </button>
                       </div>
+                      
+                      {isEditingMolecule ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Gene Symbol</label>
+                              <input
+                                type="text"
+                                value={moleculeInputs.geneSymbol}
+                                onChange={(e) => setMoleculeInputs(prev => ({ ...prev, geneSymbol: e.target.value }))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">UniProt ID</label>
+                              <input
+                                type="text"
+                                value={moleculeInputs.uniprotId}
+                                onChange={(e) => setMoleculeInputs(prev => ({ ...prev, uniprotId: e.target.value }))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Structure Type</label>
+                            <select
+                              value={moleculeInputs.structureType}
+                              onChange={(e) => setMoleculeInputs(prev => ({ ...prev, structureType: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Small molecule</option>
+                              <option>Biologic</option>
+                              <option>Antibody</option>
+                              <option>Peptide</option>
+                              <option>Gene therapy</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Mechanism</label>
+                            <input
+                              type="text"
+                              value={moleculeInputs.mechanism}
+                              onChange={(e) => setMoleculeInputs(prev => ({ ...prev, mechanism: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., PDE3/4 inhibitor, receptor agonist"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Route of Administration</label>
+                            <select
+                              value={moleculeInputs.route}
+                              onChange={(e) => setMoleculeInputs(prev => ({ ...prev, route: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Oral</option>
+                              <option>Inhalation</option>
+                              <option>Intravenous</option>
+                              <option>Subcutaneous</option>
+                              <option>Intramuscular</option>
+                              <option>Topical</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Indication</label>
+                            <input
+                              type="text"
+                              value={moleculeInputs.indication}
+                              onChange={(e) => setMoleculeInputs(prev => ({ ...prev, indication: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., COPD with chronic bronchitis"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phase</label>
+                            <select
+                              value={moleculeInputs.phase}
+                              onChange={(e) => setMoleculeInputs(prev => ({ ...prev, phase: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Phase I</option>
+                              <option>Phase II</option>
+                              <option>Phase III</option>
+                              <option>Phase IV</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Drug Type</label>
+                            <select
+                              value={moleculeInputs.type}
+                              onChange={(e) => setMoleculeInputs(prev => ({ ...prev, type: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Inhaled Small Molecule</option>
+                              <option>Oral Small Molecule</option>
+                              <option>Injectable Biologic</option>
+                              <option>Monoclonal Antibody</option>
+                              <option>Gene Therapy</option>
+                            </select>
+                          </div>
+                          
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              onClick={() => setIsEditingMolecule(false)}
+                              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                            >
+                              <Save className="h-4 w-4" />
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={() => {
+                                setMoleculeInputs({
+                                  geneSymbol: trialData.molecularDetails.geneSymbol,
+                                  uniprotId: trialData.molecularDetails.uniprotId,
+                                  structureType: trialData.molecularDetails.structureType,
+                                  mechanism: trialData.molecularDetails.mechanism,
+                                  route: trialData.molecularDetails.route,
+                                  indication: trialData.indication,
+                                  phase: trialData.phase,
+                                  type: trialData.type
+                                })
+                                setIsEditingMolecule(false)
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                            >
+                              <X className="h-4 w-4" />
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-sm">
+                          <div><span className="font-medium">Gene Symbol:</span> {moleculeInputs.geneSymbol}</div>
+                          <div><span className="font-medium">UniProt ID:</span> {moleculeInputs.uniprotId}</div>
+                          <div><span className="font-medium">Structure Type:</span> {moleculeInputs.structureType}</div>
+                          <div><span className="font-medium">Mechanism:</span> {moleculeInputs.mechanism}</div>
+                          <div><span className="font-medium">Route:</span> {moleculeInputs.route}</div>
+                          <div><span className="font-medium">Indication:</span> {moleculeInputs.indication}</div>
+                          <div><span className="font-medium">Phase:</span> {moleculeInputs.phase}</div>
+                          <div><span className="font-medium">Drug Type:</span> {moleculeInputs.type}</div>
+                          <div><span className="font-medium">Selected CRO:</span> Medpace Holdings Inc</div>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-3">Trial Information</h3>
@@ -904,6 +1128,112 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Risk Impact Analysis */}
+                  {isEditingMolecule && (
+                    <div className="p-6 pt-0 border-t border-gray-100">
+                      <h4 className="font-semibold text-gray-900 mb-4">Risk Impact Analysis</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-medium text-gray-700">Risk Factors</h5>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span>Gene Symbol Complexity:</span>
+                              <span className={moleculeInputs.geneSymbol.length > 6 ? 'text-red-600' : 'text-green-600'}>
+                                {moleculeInputs.geneSymbol.length > 6 ? '+5' : '0'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Structure Type:</span>
+                              <span className={
+                                moleculeInputs.structureType === 'Small molecule' ? 'text-green-600' :
+                                moleculeInputs.structureType === 'Biologic' ? 'text-red-600' :
+                                moleculeInputs.structureType === 'Antibody' ? 'text-red-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.structureType === 'Small molecule' ? '-2' :
+                                 moleculeInputs.structureType === 'Biologic' ? '+8' :
+                                 moleculeInputs.structureType === 'Antibody' ? '+12' : '0'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Mechanism Complexity:</span>
+                              <span className={
+                                moleculeInputs.mechanism.includes('dual') || moleculeInputs.mechanism.includes('multiple') ? 'text-red-600' : 'text-green-600'
+                              }>
+                                {moleculeInputs.mechanism.includes('dual') || moleculeInputs.mechanism.includes('multiple') ? '+5' : '-2'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Route of Administration:</span>
+                              <span className={
+                                moleculeInputs.route === 'Oral' ? 'text-green-600' :
+                                moleculeInputs.route === 'Inhalation' ? 'text-yellow-600' :
+                                moleculeInputs.route === 'Intravenous' ? 'text-red-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.route === 'Oral' ? '-5' :
+                                 moleculeInputs.route === 'Inhalation' ? '+3' :
+                                 moleculeInputs.route === 'Intravenous' ? '+8' : '0'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Indication Complexity:</span>
+                              <span className={
+                                moleculeInputs.indication.includes('cancer') || moleculeInputs.indication.includes('oncology') ? 'text-red-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.indication.includes('cancer') || moleculeInputs.indication.includes('oncology') ? '+15' : '+2'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Phase Impact:</span>
+                              <span className={
+                                moleculeInputs.phase === 'Phase I' ? 'text-green-600' :
+                                moleculeInputs.phase === 'Phase II' ? 'text-green-600' :
+                                moleculeInputs.phase === 'Phase III' ? 'text-yellow-600' :
+                                moleculeInputs.phase === 'Phase IV' ? 'text-green-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.phase === 'Phase I' ? '-10' :
+                                 moleculeInputs.phase === 'Phase II' ? '-5' :
+                                 moleculeInputs.phase === 'Phase III' ? '0' :
+                                 moleculeInputs.phase === 'Phase IV' ? '-8' : '0'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-medium text-gray-700">Risk Summary</h5>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span>Base Risk Score:</span>
+                              <span className="text-gray-600">72</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Total Modifiers:</span>
+                              <span className={dynamicRiskScore - 72 > 0 ? 'text-red-600' : 'text-green-600'}>
+                                {dynamicRiskScore - 72 > 0 ? '+' : ''}{dynamicRiskScore - 72}
+                              </span>
+                            </div>
+                            <div className="border-t border-gray-200 pt-2">
+                              <div className="flex justify-between font-medium">
+                                <span>Final Risk Score:</span>
+                                <span className={dynamicRiskLevel === 'High Risk' ? 'text-red-600' : 
+                                                 dynamicRiskLevel === 'Medium Risk' ? 'text-yellow-600' : 'text-green-600'}>
+                                  {dynamicRiskScore}/100
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>Risk Level:</span>
+                                <span className={dynamicRiskLevel === 'High Risk' ? 'text-red-600' : 
+                                                 dynamicRiskLevel === 'Medium Risk' ? 'text-yellow-600' : 'text-green-600'}>
+                                  {dynamicRiskLevel}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -971,8 +1301,8 @@ export default function Home() {
                               />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="font-bold text-gray-900 text-2xl">
-                                {trialData.riskScore}
+                              <span className="font-bold text-gray-900 text-2xl transition-all duration-300">
+                                {dynamicRiskScore}
                               </span>
                             </div>
                           </div>
