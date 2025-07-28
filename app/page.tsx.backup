@@ -1,0 +1,3141 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronUp, RefreshCw, Edit3, Save, X, Zap, Activity, BarChart3 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useAI } from '@/lib/ai-context'
+
+// Data for the application
+const trialData = {
+  name: 'OHT-202',
+  indication: 'COPD with chronic bronchitis',
+  phase: 'Phase III',
+  type: 'Inhaled Small Molecule',
+  riskScore: 72,
+  riskLevel: 'High Risk',
+  countries: 15,
+  sites: 85,
+  duration: '24 months',
+  budget: '$78,000,000',
+  molecularDetails: {
+    geneSymbol: 'PDE3A',
+    uniprotId: 'P27815',
+    structureType: 'Small molecule',
+    mechanism: 'PDE3/4 inhibitor',
+    route: 'Inhalation',
+    molecularWeight: 'Not specified',
+    solubility: 'Not specified',
+    targetReceptor: 'Not specified',
+    halfLife: 'Not specified'
+  },
+  trialInfo: {
+    studyDesign: 'Randomized, double-blind, placebo-controlled',
+    primaryEndpoint: 'FEV1 AUC0-12h at Week 12',
+    patientPopulation: 'Moderate-to-severe COPD patients',
+    protocolNumber: 'VER-202-301',
+    clinicalTrialsGov: 'NCT04636671'
+  },
+  cro: 'Medpace Holdings Inc'
+}
+
+const riskComponents = [
+  {
+    name: 'Critical API Supply Risk',
+    score: 78,
+    description: 'Single-source dependency on Primary API Supplier with 16-week lead time creates critical supply vulnerability',
+    detailedAnalysis: 'Complete dependency on Primary API Supplier for API supply creates critical single point of failure. Supply disruption simulation suggested 4-6 month delay risk in trial start if primary API supply was interrupted. Facility has satisfactory GMP record per EudraGMDP but lacks redundancy in batch scale testing.',
+    operationalImpact: 'Any disruption at primary supplier facility would halt API supply within current inventory buffer. Manufacturing restart could require 6-12 months including re-qualification processes.',
+    recommendations: [
+      'Initiate qualification of secondary API supplier within 60 days',
+      'Increase inventory buffer to 6-month supply',
+      'Simplify synthetic pathway to reduce intermediates'
+    ],
+    dataSources: [
+      'EudraGMDP Database: European GMP compliance database with facility inspection records',
+      'Supply Chain Risk Assessment: Internal analysis of API supplier dependencies and lead times',
+      'Reaxys Chemical Database: API synthesis route complexity and alternative pathway analysis'
+    ]
+  },
+  {
+    name: 'Site Activation Delays',
+    score: 71,
+    description: 'IRB/EC approvals averaging 75 days with only 18 of 85 planned sites activated at inflection point',
+    detailedAnalysis: 'Ethics approvals show wide variability, especially in Eastern Europe and APAC regions. Out of 85 planned sites, predictive modeling correctly anticipated that only 18 would be activated at time of inflection. Site testing capacity for spirometry and biomarker sampling uneven across network.',
+    operationalImpact: 'Site activation bottlenecks could delay enrollment by 3-6 months. Geographic clustering of delays particularly problematic in high-enrollment regions.',
+    recommendations: [
+      'Shift site selection to more predictable jurisdictions',
+      'Implement targeted PI training for inhaled drug protocols',
+      'Establish mobile spirometry units for infrastructure-limited sites'
+    ],
+    dataSources: [
+      'IRB Timeline Database: Historical ethics approval times by country and therapeutic area',
+      'Site Activation Tracking: Real-time monitoring of regulatory approval progress',
+      'Site Capability Assessment: Infrastructure evaluation for spirometry and biomarker testing'
+    ]
+  },
+  {
+    name: 'Geographic Enrollment Risk',
+    score: 65,
+    description: 'Higher dropout rates anticipated in Eastern Europe and APAC regions based on digital twin modeling',
+    detailedAnalysis: 'Digital twin simulation predicted 22% overall dropout rate using EudraCT and EvaluatePharma benchmarks, with higher attrition anticipated in Eastern Europe and certain APAC geographies. Patient engagement metrics stronger in North America. Geopolitical tensions in APAC flagged moderate risk for site operations.',
+    operationalImpact: 'Geographic enrollment imbalance could compromise statistical power. Higher dropout regions may require enrollment oversampling, extending timeline and increasing costs.',
+    recommendations: [
+      'Frontload enrollment in North America and Western Europe',
+      'Implement enhanced patient engagement programs in high-risk regions',
+      'Establish contingency sites in stable jurisdictions'
+    ],
+    dataSources: [
+      'EudraCT Database: European clinical trial dropout benchmarks for respiratory indications',
+      'EvaluatePharma: COPD trial enrollment and retention analytics by geography',
+      'Geopolitical Risk Intelligence: Regional stability assessment and trial impact analysis'
+    ]
+  },
+  {
+    name: 'Protocol Complexity Burden',
+    score: 58,
+    description: 'FEV1 endpoint optimization successful but visit schedule and spirometry requirements create patient burden',
+    detailedAnalysis: 'Simulation evaluated FEV₁ vs. exacerbation rate as dual endpoints, with final design emphasizing FEV₁ due to higher statistical power and reduced variability in 24-week window. Visit schedule optimized to reduce visit fatigue while preserving >90% power on primary endpoint. Spirometry requirements at each visit may contribute to dropout risk.',
+    operationalImpact: 'Protocol complexity contributes to projected 22% dropout rate. Frequent spirometry testing particularly burdensome for elderly COPD patients with mobility limitations.',
+    recommendations: [
+      'Implement home spirometry options where feasible',
+      'Reduce non-essential visit procedures',
+      'Provide transportation assistance for elderly patients'
+    ],
+    dataSources: [
+      'FDA BIMO Database: Regulatory precedents for COPD endpoint selection and design',
+      'Patient Burden Assessment Studies: COPD patient feedback on visit frequency and testing requirements',
+      'Respiratory Trial Registry: Historical COPD trial designs and dropout correlation analysis'
+    ]
+  },
+  {
+    name: 'External Disruption Risk',
+    score: 23,
+    description: 'Low overall external risk with moderate geopolitical tensions in APAC region monitored',
+    detailedAnalysis: 'Overall disruption risk scored low due to proactive routing and real-time regulatory monitoring. Moderate tensions in APAC flagged by early-stage modeling (Ukraine war, China trade instability) prompted geographic pivot in trial design. 5 active alerts during planning included shipping backlog and country-specific IRB policy changes.',
+    operationalImpact: 'External factors well-managed through proactive mitigation. Geographic diversification and CRO dashboard overlays provide adequate risk coverage.',
+    recommendations: [
+      'Continue real-time monitoring of APAC geopolitical situation',
+      'Maintain shipping route diversification',
+      'Monitor regulatory policy changes in key markets'
+    ],
+    dataSources: [
+      'Panjiva Trade Intelligence: Global shipping data and supply chain disruption monitoring',
+      'Regulatory Intelligence Network: Real-time policy change monitoring across target markets',
+      'Geopolitical Risk Assessment: Regional stability monitoring and contingency planning'
+    ]
+  }
+]
+
+const recommendedActions = [
+  {
+    name: 'Establish Secondary API Supplier',
+    priority: 'Critical',
+    priorityColor: 'bg-red-100 text-red-800 border-red-200',
+    strategicRationale: 'Single-source dependency on Primary API Supplier creates critical supply vulnerability with 16-week lead time. Supply disruption simulation suggested 4-6 month delay risk in trial start if primary API supply was interrupted.',
+    businessCase: 'Secondary supplier qualification investment of $2.5M prevents 4-6 month trial delay worth $12-18M in extended trial costs and potential market entry delays.',
+    riskMitigation: 'Eliminates single point of failure in API supply chain. Provides redundancy and competitive pricing leverage.',
+    budgetImpact: '$2.5M (qualification, testing, regulatory submissions)',
+    timelineImpact: '16-week implementation, prevents 4-6 month delay risk',
+    successProbability: '90-95% based on supplier qualification precedents',
+    detailedImplementationPlan: [
+      {
+        phase: 'Supplier Identification & Qualification',
+        timeline: 'Week 1-8',
+        activities: [
+          'Screen 3-5 potential secondary suppliers',
+          'Conduct GMP facility audits',
+          'Evaluate synthetic route compatibility',
+          'Assess regulatory compliance history'
+        ],
+        requiredResources: [
+          'Supply chain team (4 FTE weeks)',
+          'Quality assurance specialists',
+          'Regulatory consultants',
+          'Technical evaluation team'
+        ],
+        keyRisks: [
+          'Limited qualified supplier options',
+          'Regulatory approval delays',
+          'Synthetic route incompatibility',
+          'Cost escalation during qualification'
+        ]
+      },
+      {
+        phase: 'Technical Transfer & Validation',
+        timeline: 'Week 9-16',
+        activities: [
+          'Transfer analytical methods',
+          'Conduct process validation',
+          'Establish quality control protocols',
+          'Complete regulatory submissions'
+        ],
+        requiredResources: [
+          'Technical transfer team (6 FTE weeks)',
+          'Validation specialists',
+          'Regulatory affairs team',
+          'Quality control laboratory'
+        ],
+        keyRisks: [
+          'Method transfer failures',
+          'Validation study delays',
+          'Regulatory queries',
+          'Quality control issues'
+        ]
+      }
+    ],
+    successMetrics: [
+      'Secondary supplier qualified within 16 weeks',
+      'API supply redundancy established',
+      'Cost savings of 15-20% through competition',
+      'Regulatory approval for secondary source'
+    ],
+    historicalPrecedent: 'Similar secondary supplier qualification for respiratory drug reduced supply risk by 85% and achieved 18% cost savings through competitive pricing.',
+    supportingDataSources: [
+      'EudraGMDP Database: European GMP compliance database with facility inspection records',
+      'Supply Chain Risk Assessment: Internal analysis of API supplier dependencies and lead times',
+      'Reaxys Chemical Database: API synthesis route complexity and alternative pathway analysis'
+    ]
+  },
+  {
+    name: 'Optimize Site Activation Strategy',
+    priority: 'High',
+    priorityColor: 'bg-orange-100 text-orange-800 border-orange-200',
+    strategicRationale: 'IRB/EC approvals averaging 75 days with wide variability threaten enrollment timeline. Only 18 of 85 sites activated at inflection point requires strategic intervention.',
+    businessCase: 'Site optimization investment of $1.5M accelerates activation by 2-3 months and improves enrollment predictability. Prevents 4-6 month enrollment extension worth $8-12M in extended trial costs.',
+    riskMitigation: 'Reduces activation timeline variability and improves enrollment predictability. Shifts focus to high-performing jurisdictions with established regulatory pathways.',
+    budgetImpact: '$1.5M (site optimization, mobile units, training)',
+    timelineImpact: '12-week implementation, saves 2-3 months activation time',
+    successProbability: '85-90% based on precedent',
+    detailedImplementationPlan: [
+      {
+        phase: 'Site Management',
+        timeline: 'Week 1-8',
+        activities: [
+          'Implement geographic pivot strategy',
+          'Shift site selection emphasis to North America and Western Europe where activation timelines more predictable and patient engagement stronger'
+        ],
+        requiredResources: [
+          'Site management team (6 FTE weeks)',
+          'Regional site identification consultants',
+          'Site feasibility assessments'
+        ],
+        keyRisks: [
+          'Reduced geographic diversity',
+          'Higher site costs in developed markets',
+          'Investigator availability constraints'
+        ]
+      },
+      {
+        phase: 'Clinical Operations',
+        timeline: 'Week 4-12',
+        activities: [
+          'Establish mobile spirometry units',
+          'Deploy mobile spirometry units to support sites with infrastructure limitations, particularly in emerging markets'
+        ],
+        requiredResources: [
+          'Mobile unit procurement $200K',
+          'Trained technician network',
+          'Equipment maintenance contracts'
+        ],
+        keyRisks: [
+          'Regulatory approval for mobile units',
+          'Technician training and certification',
+          'Equipment reliability in field conditions'
+        ]
+      }
+    ],
+    successMetrics: [
+      'Average IRB approval time reduced to <60 days',
+      'Site activation rate improved to >70%',
+      'Enrollment timeline acceleration by 2-3 months'
+    ],
+    historicalPrecedent: 'COPD trial implemented similar geographic optimization, reducing average site activation time from 85 to 52 days and completing enrollment 3 months ahead of schedule.',
+    supportingDataSources: [
+      'IRB Timeline Database: Historical ethics approval times by country and therapeutic area',
+      'Site Performance Analytics: Activation timeline and enrollment performance by geography'
+    ]
+  }
+]
+
+const tabs = [
+  'Overview',
+  'Digital Twin',
+  'CRO Analysis',
+  'CMC Risk',
+  'Trial Design',
+  'Site Readiness',
+  'External Factors'
+]
+
+const digitalTwinComponents = [
+  {
+    name: 'Patient Identification & Dropout Modeling',
+    description: 'Agent-based Monte Carlo simulations predicting 15-25% dropout with Bayesian modeling of risk factors',
+    modelingApproach: 'Agent-based Monte Carlo simulations with Bayesian dropout prediction models. Individual patient agents with demographic, clinical, and behavioral attributes interact within trial environment to predict dropout patterns.',
+    validationResults: 'Model validated against ENHANCE-1 and ENHANCE-2 trial data with 92% accuracy in predicting dropout rates. Successfully predicted 84.5% completion rate in ENHANCE-1 and 77.3% in ENHANCE-2.',
+    dataSources: [
+      'ENHANCE-1 & ENHANCE-2 trial databases: Historical dropout patterns and patient characteristics',
+      'Patient engagement analytics: Behavioral data from previous COPD trials',
+      'Demographic risk modeling: Age, gender, and geographic factors affecting retention'
+    ]
+  },
+  {
+    name: 'Enrollment Shortfall Risk Assessment',
+    description: 'Operational Poisson/Discrete-event modeling predicting 20-30% under-enrollment risk in Europe-only strategy',
+    modelingApproach: 'Poisson process modeling combined with discrete-event simulation to predict enrollment rates across different geographic regions and site activation scenarios.',
+    validationResults: 'Model accurately predicted enrollment shortfalls in 3 out of 4 recent COPD trials. Successfully identified geographic enrollment risks with 89% precision.',
+    dataSources: [
+      'Site activation timeline database: Historical IRB approval and site readiness data',
+      'Geographic enrollment analytics: Regional patient availability and recruitment patterns',
+      'Operational efficiency metrics: Site performance and enrollment rate benchmarks'
+    ]
+  },
+  {
+    name: 'Timeline Extension & Mitigation Modeling',
+    description: 'Discrete-event simulation of site activation delays and pandemic-like disruption scenarios',
+    modelingApproach: 'Discrete-event simulation modeling site activation delays, regulatory bottlenecks, and external disruption scenarios including pandemic-like events.',
+    validationResults: 'Model predicted COVID-19 impact on trial timelines with 87% accuracy. Successfully identified mitigation strategies that reduced delays by 40%.',
+    dataSources: [
+      'Regulatory timeline database: Historical approval times and regulatory bottleneck patterns',
+      'External disruption monitoring: Geopolitical and public health event impact analysis',
+      'Mitigation strategy effectiveness: Historical data on intervention success rates'
+    ]
+  }
+]
+
+const croAlternatives = [
+  {
+    name: 'ICON plc',
+    score: 89,
+    description: 'ICON has managed multiple global Phase III COPD and asthma studies, including programs that used inhaled devices and Blow-Fill-Seal drug products. Their respiratory device center of excellence is familiar with BFS sterility, fill-finish validation, and device-drug compatibility, directly addressing CMC and GMP concerns. ICON also runs an established EU CTIS taskforce that routinely hits the 12-day Request-for-Information window, reducing the long ethics-committee tail you saw in Europe. Their FIRECREST ePRO/eConsent platform can integrate home-spirometry and digital diaries, supporting the dropout-mitigation strategy you employed in older COPD patients. In short: ICON lowers single-source CMC risk, speeds IRB/EC approvals, and sustains digital compliance.',
+    keyStrengths: [
+      'Global Phase III COPD and asthma study experience',
+      'Respiratory device center of excellence',
+      'EU CTIS taskforce with 12-day RFI window',
+      'FIRECREST ePRO/eConsent platform integration',
+      'BFS sterility and fill-finish validation expertise'
+    ],
+    riskMitigation: [
+      'Reduces single-source CMC risk',
+      'Speeds IRB/EC approvals',
+      'Sustains digital compliance',
+      'Addresses device-drug compatibility concerns',
+      'Supports dropout-mitigation strategies'
+    ],
+    implementationTimeline: '8-12 weeks for full transition with parallel operations during handover period.'
+  },
+  {
+    name: 'IQVIA Biotech (Respiratory Center of Excellence)',
+    score: 87,
+    description: 'IQVIA maintains a large North-American and European respiratory site network (600+ vetted investigators) that matches the geographic pivot which rescued your enrollment curve. The CRO\'s FDA-483 rate has remained in single digits over five years, and its internal audit group specialises in data-integrity CAPA, directly countering the regulatory-compliance gaps flagged with your previous vendor. IQVIA\'s Orchestrated Clinical Trials dashboard gives live visibility into enrollment velocity, SDV backlog, and query-turnaround, aligning with the oncology-grade KPIs you imposed. Through its Thermo Fisher Clinical Supply affiliate, IQVIA can also integrate depot management and controlled-temperature shipping—useful when you maintain six-month API buffers and room-temperature shipping tolerances. Bottom line: IQVIA strengthens real-time performance oversight, reduces CRO audit risk, and dovetails with your supply-chain safeguards.',
+    keyStrengths: [
+      'Large North-American and European respiratory site network (600+ investigators)',
+      'FDA-483 rate in single digits over five years',
+      'Internal audit group specializing in data-integrity CAPA',
+      'Orchestrated Clinical Trials dashboard',
+      'Thermo Fisher Clinical Supply affiliate integration'
+    ],
+    riskMitigation: [
+      'Strengthens real-time performance oversight',
+      'Reduces CRO audit risk',
+      'Dovetails with supply-chain safeguards',
+      'Provides live visibility into enrollment velocity',
+      'Integrates depot management and controlled-temperature shipping'
+    ],
+    implementationTimeline: '10-14 weeks with focus on site network activation and dashboard integration.'
+  },
+  {
+    name: 'Parexel (Respiratory & Rare Disease Unit)',
+    score: 84,
+    description: 'Parexel has run Phase III trials for several inhaled therapies, so its teams understand nebulizer training logistics and home-care device support. Their biostatistics group, led by ex-FDA reviewers, can refine dual-endpoint gatekeeping and multiplicity, reducing the trial-design risk you scored at 60/100. Parexel\'s Patient Journey services embed tele-visits and home-nurse models that mirror the hybrid visit schedule you used to keep dropout near 15%. The CRO also conducts rigorous mock pre-approval inspections, supporting your proactive QA strategy. In effect, Parexel tackles device-handling burden, bolsters statistical robustness, and maintains high patient retention in an elderly COPD cohort.',
+    keyStrengths: [
+      'Phase III inhaled therapy trial experience',
+      'Biostatistics group led by ex-FDA reviewers',
+      'Patient Journey services with tele-visits',
+      'Home-nurse models for hybrid visit schedules',
+      'Rigorous mock pre-approval inspections'
+    ],
+    riskMitigation: [
+      'Tackles device-handling burden',
+      'Bolsters statistical robustness',
+      'Maintains high patient retention',
+      'Reduces trial-design risk',
+      'Supports proactive QA strategy'
+    ],
+    implementationTimeline: '6-10 weeks with emphasis on biostatistics integration and patient journey optimization.'
+  }
+]
+
+const manufacturingRisks = [
+  {
+    name: 'Single-Source API & Drug Product Dependency',
+    description: 'Critical single point of failure with one primary API manufacturer and one primary CDMO for nebulized fill/finish.',
+    detailedAnalysis: 'OHT-202 manufacturing initially relied on single-source API and drug product suppliers, creating 4-6 month supply disruption risk with ~16 week lead times and no qualified backup. Secondary supplier qualification was initiated within 60 days of risk identification. Dual-sourcing for API and DP achieved before NDA submission, eliminating critical vulnerability.',
+    operationalImpact: 'Single-source dependency posed unacceptable risk for pivotal phase assets. Proactive dual-sourcing strategy prevented potential clinical supply interruptions and supported regulatory submission timeline. No clinical supply interruptions occurred during ENHANCE trials.',
+    recommendations: [
+      'Maintain dual-source strategy for all critical components',
+      'Implement continuous supplier performance monitoring',
+      'Establish strategic inventory buffers for critical materials'
+    ],
+    dataSources: [
+      'EudraGMDP Database: European GMP compliance database with manufacturing site inspection records',
+      'Internal Supplier Qualification Data: Supplier audit records and qualification timeline tracking',
+      'FDA BIMO Database: Bioresearch Monitoring Program inspection records for manufacturing sites'
+    ]
+  },
+  {
+    name: 'Blow-Fill-Seal (BFS) Manufacturing Technology',
+    description: 'Specialized CDMO using BFS technology minimized contamination risk and ensured dose precision.',
+    detailedAnalysis: 'Manufacturing partner selection focused on specialized CDMO capabilities, with The Ritedose Corporation utilizing Blow-Fill-Seal (BFS) technology for nebulized drug product. BFS technology minimized contamination risk through integrated forming, filling, and sealing process. Early tech transfer to second CDMO improved robustness and supported pre-approval inspections. Process harmonization across sites ensured consistent product quality.',
+    operationalImpact: 'BFS technology selection reduced sterility risk and improved dose uniformity for nebulized formulation. Dual CDMO strategy with harmonized processes supported regulatory inspections and commercial readiness. Mock PAIs and real-time QA analytics avoided critical FDA observations.',
+    recommendations: [
+      'Continue BFS technology for commercial manufacturing',
+      'Implement real-time release testing where feasible',
+      'Maintain harmonized processes across manufacturing sites'
+    ],
+    dataSources: [
+      'FDA Guidance on Sterile Drug Products: Regulatory guidance for aseptic processing and BFS technology',
+      'The Ritedose Corporation Capability Assessment: Technical evaluation of BFS manufacturing capabilities and capacity',
+      'Pharmaceutical Technology Database: Industry standards for nebulized drug product manufacturing'
+    ]
+  },
+  {
+    name: 'Synthetic Route Optimization',
+    description: '10-14 step synthesis with multiple critical parameters optimized to reduce batch failure risk and lead time variability.',
+    detailedAnalysis: 'Initial synthetic route complexity involved 10-14 steps with multiple critical parameters. This created a batch failure risk of approximately 10-15%, with each failure resulting in a 4-week delay and an estimated $200,000 cost. Route optimization simplified the synthesis and enhanced in-process controls. These improvements led to increased yields, reduced lead time variability, decreased manufacturing risk, and improved supply chain reliability.',
+    operationalImpact: 'Route optimization successfully reduced batch failure rates and manufacturing lead time variability. Enhanced in-process controls resulted in improved yield consistency and reduced cost per batch. Simplified synthesis facilitated technology transfer to multiple manufacturing sites.',
+    recommendations: [
+      'Continue process optimization for commercial scale',
+      'Implement statistical process control for critical parameters',
+      'Maintain detailed batch genealogy records'
+    ],
+    dataSources: [
+      'Reaxys Chemical Database: Used for synthetic route complexity analysis and optimization strategies',
+      'Process Development Records: Internal documentation for route optimization and yield improvements',
+      'Chemical Manufacturing Intelligence: Provides industry benchmarks for API synthesis complexity and failure rates'
+    ]
+  },
+  {
+    name: 'Cold Chain & Device Compatibility',
+    description: 'Do not freeze requirement with 5-8% global excursion risk mitigated through stability strategy.',
+    detailedAnalysis: 'The OHT-202 nebulized formulation requires "do not freeze" cold chain management, with a global excursion risk of 5-8%. A stability strategy demonstrated room-temperature excursion tolerances, which helped reduce cold-chain fragility. Device-drug compatibility studies confirmed consistent delivery across various nebulizer platforms. Enhanced packaging and shipping protocols were implemented to minimize temperature excursion risk.',
+    operationalImpact: 'The room-temperature excursion tolerance significantly reduced supply chain complexity and cost. Device compatibility validation ensured consistent patient dosing across different nebulizer types. Reduced cold-chain fragility improved global distribution reliability.',
+    recommendations: [
+      'Maintain room-temperature excursion data for commercial use',
+      'Implement enhanced cold chain monitoring',
+      'Continue device compatibility validation for new nebulizer platforms'
+    ],
+    dataSources: [
+      'Stability Study Database: Provides temperature excursion tolerance data and stability profiles',
+      'Panjiva Trade Intelligence: Offers global shipping performance and temperature control analytics',
+      'Device Compatibility Studies: Used for nebulizer performance validation across device platforms'
+    ]
+  },
+  {
+    name: 'Multi-Region Regulatory Filing Complexity',
+    description: '15 markets with distinct CMC requirements successfully managed through harmonized global dossier.',
+    detailedAnalysis: 'Regulatory filing complexity across 15 markets with distinct CMC requirements posed staggered approval risk of 2-4 months per region. Harmonized global dossier strategy addressed varying requirements while maintaining consistent product specifications. Proactive EU CTIS preparation and parallel IRB submissions accelerated approval timelines. Internal audits before NDA submission ensured regulatory readiness.',
+    operationalImpact: 'Harmonized dossier strategy minimized regulatory approval delays across markets. CMC dossier effectively handled multi-region requirements without major regulatory questions. First-cycle FDA approval achieved with no AdCom requirement, validating regulatory strategy.',
+    recommendations: [
+      'Maintain harmonized global CMC strategy for lifecycle management',
+      'Continue proactive regulatory engagement across markets',
+      'Implement post-approval change control procedures'
+    ],
+    dataSources: [
+      'Regulatory Intelligence Database: Country-specific CMC requirements and harmonization strategies',
+      'EU CTIS Database: European Clinical Trial Information System requirements and timelines',
+      'FDA Regulatory Submissions: Historical approval timelines and regulatory feedback patterns'
+    ]
+  }
+]
+
+const trialDesignComponents = [
+  {
+    name: 'Primary Endpoint Optimization',
+    description: 'FEV₁ AUC₀-₁₂h at Week 12 selected over exacerbation rate for higher statistical power and reduced variability',
+    detailedAnalysis: 'FEV₁ AUC₀-₁₂h at Week 12 was selected as the primary endpoint over exacerbation rate due to higher statistical power and reduced variability. This endpoint provided more reliable and consistent measurements, enabling better detection of treatment effects while maintaining regulatory acceptability.',
+    operationalImpact: 'Primary endpoint selection optimized statistical power and reduced variability, enabling more reliable detection of treatment effects and supporting successful regulatory approval.',
+    dataSources: [
+      'FDA Statistical Guidance: Regulatory guidance on endpoint selection and statistical power requirements',
+      'ENHANCE Trial Protocols: Primary endpoint rationale and statistical analysis plans',
+      'COPD Clinical Trial Database: Historical endpoint performance and variability analysis'
+    ]
+  },
+  {
+    name: 'Patient Population Strategy',
+    description: 'Broad symptomatic moderate-to-severe COPD population with pre-specified stratified analyses on frequent exacerbators',
+    detailedAnalysis: 'Initial risk of effect dilution without "frequent exacerbator" enrichment was mitigated through broad population strategy with focused analysis. Kept broad inclusion criteria for generalizability while implementing pre-specified stratified analyses on frequent exacerbators to prove value. This approach avoided enrollment limitations while preserving ability to demonstrate benefit in key subgroups. Benefit shown regardless of eosinophil count, supporting broad population approach.',
+    operationalImpact: 'Broad population strategy improved enrollment feasibility while maintaining regulatory acceptability. Stratified analyses provided evidence for key subgroups without limiting overall population. Approach supported successful regulatory approval across broad COPD population.',
+    dataSources: [
+      'ClinicalTrials.gov: COPD trial population strategies and enrollment outcomes',
+      'FDA Oncology Guidance: Regulatory principles for endpoint selection and population definition',
+      'Ohtuvayre HCP Site: Clinical evidence and population benefit data'
+    ]
+  },
+  {
+    name: 'Visit Schedule & Patient Burden',
+    description: 'Streamlined 10-15 visits over 24-48 weeks with decentralization elements to reduce patient burden',
+    detailedAnalysis: 'Initial protocol included 10-15 visits over 24-48 weeks with daily eDiary requirements, creating dropout risk. Patient-centric simplification streamlined procedures/tests with no onerous mandatory biomarkers. Optional eosinophil testing provided insights without burden. Decentralization elements included telemedicine, home spirometry (where feasible), and local labs to curb visit fatigue. Fewer in-person visits and telehealth/home nebulizer use reduced patient burden.',
+    operationalImpact: 'Visit schedule optimization contributed to successful completion rates: 84.5% (ENHANCE-1), 77.3% (ENHANCE-2). Decentralization elements reduced travel burden while maintaining data quality. Patient-centric design supported enrollment and retention within modeled tolerances.',
+    dataSources: [
+      'Patient Burden Literature: ACRP studies on visit frequency impact on COPD patient retention',
+      'ACRP Digital Burden Statistics: Association of Clinical Research Professionals digital tool burden analysis',
+      'Verona Press Releases: Trial design rationale and patient-centric approach documentation'
+    ]
+  },
+  {
+    name: 'Digital Health Integration',
+    description: 'Daily eDiary with robust ePRO training and 24/7 support to address digital tool burden',
+    detailedAnalysis: 'Daily eDiary requirements created digital tool burden risk, particularly for older COPD patients. Robust ePRO training and 24/7 support addressed digital divide concerns. On-site tech training, device simplification, optional non-digital paths, multilingual interfaces, and follow-up for missed entries ensured inclusive participation. Demonstrated that older COPD patients can successfully use digital tools with proper support.',
+    operationalImpact: 'Comprehensive digital support strategy prevented bias from digital divide. Older/rural patients successfully participated with appropriate training and support. Digital inclusion tactics maintained data quality while ensuring broad population representation.',
+    dataSources: [
+      'ACRP Digital Burden Stats: Digital tool adoption rates and support requirements by age group',
+      'Nature.com Cost of Delay: Analysis of digital tool implementation impact on trial timelines',
+      'Digital Health Implementation Studies: Best practices for ePRO implementation in respiratory trials'
+    ]
+  },
+  {
+    name: 'Statistical Power & Multiplicity',
+    description: 'Statistical design preserved >90% power on primary endpoint while managing multiplicity through hierarchy',
+    detailedAnalysis: 'Statistical hierarchy/gatekeeping approach prioritized FEV₁ to secure primary success while maintaining exacerbation assessment without alpha penalty. Broad population with focused analysis avoided enrollment limitations while preserving statistical power. PRO inconsistency (met in ENHANCE-1, not in ENHANCE-2) was outweighed by strong exacerbation data, with regulators accepting overall benefit package.',
+    operationalImpact: 'Statistical design achieved primary endpoint success in both trials while demonstrating clinically meaningful exacerbation reduction. Hierarchy approach prevented alpha penalty while maintaining comprehensive benefit assessment. Regulatory acceptance of benefit package supported approval despite PRO variability.',
+    dataSources: [
+      'FDA Statistical Guidance: Regulatory guidance on multiplicity control and statistical hierarchy',
+      'ENHANCE Trial Statistical Plans: Statistical analysis plans and power calculations',
+      'Regulatory Submission Documents: FDA and EMA statistical review and acceptance rationale'
+    ]
+  }
+]
+
+const siteReadinessFactors = [
+  {
+    name: 'Site Performance History',
+    description: '12 of 40 planned sites historically underperformed vs oncology/respiratory benchmarks with slow enrollment and protocol deviations.',
+    detailedAnalysis: '30% of planned sites (12/40) historically underperformed vs. oncology/respiratory benchmarks showing slow enrollment and protocol deviations. Strategic site replacement implemented with 12 low-performing sites swapped out and 3 additional high-performing NA sites added to boost accrual. Risk-based monitoring approach deployed with high scorers receiving streamlined oversight while lower-scoring sites received intensified monitoring.',
+    operationalImpact: 'Underperforming sites threatened to extend enrollment by 6-8 months and inflate per-patient costs. Site replacement strategy successfully mitigated timeline risk and improved overall network performance quality.',
+    dataSources: [
+      'Site Performance Database: Historical enrollment rates and protocol deviation tracking by site',
+      'Oncology Trial Benchmarks: Therapeutic area performance standards for site comparison',
+      'Site Replacement Documentation: Strategic site selection and replacement rationale'
+    ]
+  },
+  {
+    name: 'IRB/EC Approval Timeline Variability',
+    description: 'Significant regional variation in ethics approval timelines creating staggered activation and enrollment imbalance.',
+    detailedAnalysis: 'IRB/EC timeline variability shows average 75 days with significant regional differences: APAC ~95 days, EU ~65 days, NA ~52 days, creating staggered activation and enrollment imbalance. Geographic rebalancing implemented with pivot toward North America after Eastern Europe geopolitical risk emerged, ensuring enrollment continuity.',
+    operationalImpact: 'Staggered approvals created front-loaded enrollment in faster regions, risking imbalanced accrual and potential statistical issues. Geographic pivot strategy successfully maintained enrollment momentum despite regional delays.',
+    dataSources: [
+      'IRB Timeline Database: Regional ethics approval time tracking and analysis',
+      'Regulatory Intelligence Network: Country-specific approval process monitoring',
+      'Geographic Rebalancing Plan: Strategic site distribution adjustment documentation'
+    ]
+  },
+  {
+    name: 'Investigator Experience Mix',
+    description: 'Variable PI experience levels with 15 highly experienced, 18 moderate, and 7 limited experience investigators.',
+    detailedAnalysis: 'Investigator experience mix shows 15 highly experienced PIs (>5 trials), 18 moderate (2-4 trials), 7 limited (<2 trials), creating deviation risk and lower enrollment velocity at inexperienced sites. Early collaborative site engagement implemented with feasibility calls and infrastructure audits to ensure realistic targets and buy-in.',
+    operationalImpact: 'Experience gaps increase protocol deviation risk by 35% and extend patient enrollment period. Sites with inexperienced PIs show 40% lower enrollment rates and higher dropout rates, requiring enhanced support and monitoring.',
+    dataSources: [
+      'Investigator Experience Registry: PI therapeutic area experience and trial history database',
+      'Site Engagement Documentation: Feasibility assessment and infrastructure audit results',
+      'Protocol Deviation Tracking: Correlation analysis between PI experience and deviation rates'
+    ]
+  },
+  {
+    name: 'Patient Population Coverage',
+    description: '12 sites located in lower-incidence regions while high-incidence zones initially under-covered.',
+    detailedAnalysis: 'Patient density gaps found in 12 sites in lower-incidence regions, with high-incidence zones (specifically SE Asia, Eastern Europe) initially under-covered. Geographic rebalancing strategy implemented to optimize patient access and enrollment, ensuring adequate coverage of target patient populations.',
+    operationalImpact: 'Population coverage gaps extend enrollment timelines by 6-8 months and increase per-patient recruitment costs by 40%. Strategic rebalancing improved access to target patient populations in high-incidence areas.',
+    dataSources: [
+      'GLOBOCAN Cancer Statistics: Global disease incidence and mortality data by region',
+      'Patient Population Mapping: Geographic distribution analysis of target patient populations',
+      'Site Catchment Analysis: Site-specific patient recruitment potential assessment'
+    ]
+  },
+  {
+    name: 'Infrastructure & Digital Readiness',
+    description: 'Mixed infrastructure capabilities with gaps in biomarker coordination, cold-chain storage, and ePRO readiness.',
+    detailedAnalysis: 'Only approximately 60% of sites had strong biomarker/logistics coordination capabilities, with cold-chain gaps in parts of APAC and some lacking ePRO/digital readiness. Digital dashboards implemented for real-time tracking of enrollment, protocol deviations, and query rates.',
+    operationalImpact: 'Infrastructure gaps delay biomarker testing by 5-7 days per patient and increase sample rejection rates by 15%. Digital readiness issues affect data quality and real-time monitoring capabilities.',
+    dataSources: [
+      'Site Infrastructure Assessment: Comprehensive capability evaluation including biomarker and digital readiness',
+      'Cold Chain Monitoring: Temperature control and storage capability tracking by region',
+      'Digital Dashboard Implementation: Real-time monitoring system deployment and performance tracking'
+    ]
+  }
+]
+
+const externalFactors = [
+  {
+    name: 'Geopolitical Risk Assessment',
+    description: 'Stable geopolitical environment in most target markets with moderate tensions in APAC region',
+    detailedAnalysis: 'Current geopolitical risk assessment shows stable conditions in North America and Europe. APAC region shows moderate risk due to trade tensions and regulatory policy changes. China-US relations may impact regulatory approval timelines and technology transfer requirements. No immediate threats to trial conduct identified.',
+    operationalImpact: 'Geopolitical tensions may extend regulatory approval timelines in China by 2-3 months and require additional documentation. Technology transfer restrictions could affect electronic data systems integration.',
+    dataSources: [
+      'Political Risk Intelligence: Global political stability assessment and country risk ratings',
+      'Regulatory Intelligence Network: Policy change monitoring and regulatory environment analysis',
+      'Trade Policy Database: International trade restrictions and technology transfer regulations'
+    ]
+  },
+  {
+    name: 'Supply Chain Disruption Risk',
+    description: 'Moderate supply chain vulnerabilities due to single-source dependencies and geographic concentration',
+    detailedAnalysis: 'Supply chain analysis identifies vulnerabilities in API supply from India and packaging materials from China. Port congestion in Shanghai affects 30% of shipments with average 2-week delays. Energy disruptions in India pose risk to manufacturing operations. Alternative shipping routes available but at 15% cost premium.',
+    operationalImpact: 'Supply chain disruptions could delay drug supply by 3-4 weeks and increase logistics costs by 15%. Manufacturing disruptions in India could halt API production for 2-6 weeks.',
+    dataSources: [
+      'Everstream Analytics: Global supply chain risk monitoring and disruption alerts',
+      'Panjiva Trade Intelligence: Shipping data and port congestion monitoring',
+      'Manufacturing Risk Database: Facility-specific risk assessment and disruption history'
+    ]
+  },
+  {
+    name: 'Regulatory Environment Changes',
+    description: 'Stable regulatory environment with minor policy updates not affecting current trial design',
+    detailedAnalysis: 'Regulatory landscape remains stable across target markets. FDA guidance on oncology endpoints unchanged. EMA implementing minor updates to biomarker testing requirements but grandfathering existing trials. Japan PMDA maintaining current review timelines and requirements.',
+    operationalImpact: 'Regulatory stability supports current timeline projections. Minor EMA updates may require protocol clarification but no amendments expected. No impact on approval timelines anticipated.',
+    dataSources: [
+      'FDA Guidance Database: Regulatory guidance updates and policy changes',
+      'EMA Regulatory Intelligence: European regulatory policy monitoring and updates',
+      'PMDA Communication Database: Japanese regulatory guidance and review process updates'
+    ]
+  },
+  {
+    name: 'FDA Breakthrough Therapy Updates',
+    description: 'Recent FDA guidance on dual-mechanism respiratory therapies may accelerate approval pathways',
+    detailedAnalysis: 'FDA issued updated guidance in Q3 2024 for dual-mechanism respiratory therapies, potentially qualifying OHT-202 for breakthrough therapy designation. New guidance allows for smaller Phase III trials (400 vs 600 patients) with FEV₁ as single primary endpoint. Fast track designation criteria expanded to include dual-mechanism approaches.',
+    operationalImpact: 'Breakthrough therapy designation could reduce trial size by 33% and accelerate regulatory review by 4-6 months. May enable rolling submission of trial data and priority review status.',
+    dataSources: [
+      'FDA.gov Guidance Documents: Official FDA guidance on oncology drug development',
+      'Federal Register: Regulatory policy announcements and public notices',
+      'FDA Breakthrough Therapy Database: Historical breakthrough designations and approval timelines'
+    ]
+  },
+  {
+    name: 'EMA PRIME Eligibility Changes',
+    description: 'Updated EMA PRIME criteria favor dual-mechanism respiratory trials like OHT-202',
+    detailedAnalysis: 'EMA expanded PRIME eligibility criteria in 2024 to include dual-mechanism approaches with validated endpoints. FEV₁ AUC₀-₁₂h qualifies as validated endpoint under new criteria. PRIME designation provides enhanced regulatory support and accelerated assessment timelines.',
+    operationalImpact: 'PRIME designation could reduce EMA review time by 3-4 months and provide early regulatory feedback on trial design. Enhanced scientific advice available throughout development process.',
+    dataSources: [
+      'EMA PRIME Database: PRIME designation criteria and application guidelines',
+      'EudraCT Updates: European clinical trial regulatory updates and guidance',
+      'EMA Scientific Advice: Regulatory guidance for precision medicine development'
+    ]
+  }
+]
+
+export default function Home() {
+  const [activeTab, setActiveTab] = useState('Overview')
+  const [expandedTrial, setExpandedTrial] = useState(true)
+  const [expandedComponents, setExpandedComponents] = useState<{[key: string]: boolean}>({})
+  const [isLoading, setIsLoading] = useState(false)
+  const [apiData, setApiData] = useState<any>(null)
+  const [stressLevel, setStressLevel] = useState(50)
+  const [scenarioType, setScenarioType] = useState('Base Case')
+  const [isSimulationRunning, setIsSimulationRunning] = useState(false)
+  const [isEditingMolecule, setIsEditingMolecule] = useState(false)
+  
+  // Use global AI context
+  const { inputs, analysis, updateInputs } = useAI()
+  
+  // Use AI analysis data if available, otherwise use default data
+  const currentData = analysis ? {
+    drugName: analysis.drugName,
+    molecularDetails: {
+      geneSymbol: analysis.molecularDetails.geneSymbol,
+      uniprotId: analysis.molecularDetails.uniprotId,
+      structureType: analysis.molecularDetails.structureType,
+      mechanism: analysis.molecularDetails.mechanism,
+      route: analysis.molecularDetails.route,
+      molecularWeight: analysis.molecularDetails.molecularWeight,
+      solubility: analysis.molecularDetails.solubility,
+      targetReceptor: analysis.molecularDetails.targetReceptor,
+      halfLife: analysis.molecularDetails.halfLife
+    },
+    clinicalInfo: {
+      indication: analysis.clinicalInfo.indication,
+      phase: analysis.clinicalInfo.phase,
+      type: analysis.clinicalInfo.type,
+      studyDesign: analysis.clinicalInfo.studyDesign,
+      primaryEndpoint: analysis.clinicalInfo.primaryEndpoint,
+      patientPopulation: analysis.clinicalInfo.patientPopulation,
+      protocolNumber: analysis.clinicalInfo.protocolNumber,
+      clinicalTrialsGov: analysis.clinicalInfo.clinicalTrialsGov
+    },
+    riskAssessment: analysis.riskAssessment,
+    manufacturing: analysis.manufacturing,
+    marketAnalysis: analysis.marketAnalysis,
+    croAnalysis: analysis.croAnalysis,
+    trialMetrics: analysis.trialMetrics
+  } : {
+    drugName: trialData.name,
+    molecularDetails: trialData.molecularDetails,
+    clinicalInfo: {
+      indication: trialData.indication,
+      phase: trialData.phase,
+      type: trialData.type,
+      studyDesign: trialData.trialInfo.studyDesign,
+      primaryEndpoint: trialData.trialInfo.primaryEndpoint,
+      patientPopulation: trialData.trialInfo.patientPopulation,
+      protocolNumber: trialData.trialInfo.protocolNumber,
+      clinicalTrialsGov: trialData.trialInfo.clinicalTrialsGov
+    },
+    riskAssessment: {
+      overallScore: 72,
+      riskLevel: "High Risk",
+      components: []
+    },
+    manufacturing: {
+      complexity: "Moderate complexity",
+      supplyChainRisk: "Moderate risk",
+      regulatoryChallenges: "Standard challenges",
+      costEstimates: "Moderate cost"
+    },
+    marketAnalysis: {
+      competitiveLandscape: "Competitive market",
+      marketSize: "Significant opportunity",
+      regulatoryPathway: "Standard pathway",
+      timeline: "Typical timeline"
+    },
+    croAnalysis: {
+      selectedCRO: "Medpace Holdings Inc",
+      croStrengths: "Established CRO with broad experience",
+      croExperience: "Extensive Phase III trial experience",
+      croRiskFactors: "Standard operational risks"
+    },
+    trialMetrics: {
+      countries: 15,
+      sites: 85,
+      duration: "24 months",
+      budget: "$78,000,000"
+    }
+  }
+  
+
+  
+  // Use AI analysis data or inputs from global context, fallback to default
+  const moleculeInputs = {
+    geneSymbol: analysis?.molecularDetails?.geneSymbol || inputs.geneSymbol || trialData.molecularDetails.geneSymbol,
+    uniprotId: analysis?.molecularDetails?.uniprotId || inputs.uniprotId || trialData.molecularDetails.uniprotId,
+    structureType: analysis?.molecularDetails?.structureType || inputs.structureType || trialData.molecularDetails.structureType,
+    mechanism: analysis?.molecularDetails?.mechanism || inputs.mechanism || trialData.molecularDetails.mechanism,
+    route: analysis?.molecularDetails?.route || inputs.route || trialData.molecularDetails.route,
+    indication: analysis?.clinicalInfo?.indication || inputs.indication || trialData.indication,
+    phase: analysis?.clinicalInfo?.phase || inputs.phase || trialData.phase,
+    type: analysis?.clinicalInfo?.type || inputs.type || trialData.type
+  }
+  
+  // Get drug name from AI analysis or use default
+  const drugName = analysis?.drugName || trialData.name
+  
+  // Use AI analysis data for dynamic risk calculations
+  const getDynamicRiskData = () => {
+    if (analysis && analysis.riskAssessment) {
+      return {
+        score: analysis.riskAssessment.overallScore,
+        level: analysis.riskAssessment.riskLevel,
+        components: analysis.riskAssessment.components
+      }
+    }
+    
+    // Fallback to calculated risk if no AI data
+    let baseRisk = 72
+    let riskModifier = 0
+    
+    // Gene symbol complexity impact
+    if (moleculeInputs.geneSymbol.length > 6) riskModifier += 5
+    if (moleculeInputs.geneSymbol.includes('PDE')) riskModifier -= 3
+    
+    // Structure type impact
+    if (moleculeInputs.structureType === 'Small molecule') riskModifier -= 2
+    if (moleculeInputs.structureType === 'Biologic') riskModifier += 8
+    if (moleculeInputs.structureType === 'Antibody') riskModifier += 12
+    
+    // Mechanism complexity
+    if (moleculeInputs.mechanism.includes('dual') || moleculeInputs.mechanism.includes('multiple')) riskModifier += 5
+    if (moleculeInputs.mechanism.includes('inhibitor')) riskModifier -= 2
+    
+    // Route of administration
+    if (moleculeInputs.route === 'Inhalation') riskModifier += 3
+    if (moleculeInputs.route === 'Oral') riskModifier -= 5
+    if (moleculeInputs.route === 'Intravenous') riskModifier += 8
+    
+    // Indication complexity
+    if (moleculeInputs.indication.includes('COPD')) riskModifier += 2
+    if (moleculeInputs.indication.includes('cancer') || moleculeInputs.indication.includes('oncology')) riskModifier += 15
+    
+    // Phase impact
+    if (moleculeInputs.phase === 'Phase I') riskModifier -= 10
+    if (moleculeInputs.phase === 'Phase II') riskModifier -= 5
+    if (moleculeInputs.phase === 'Phase III') riskModifier += 0
+    if (moleculeInputs.phase === 'Phase IV') riskModifier -= 8
+    
+    const calculatedScore = Math.max(0, Math.min(100, baseRisk + riskModifier))
+    return {
+      score: calculatedScore,
+      level: calculatedScore >= 70 ? 'High Risk' : calculatedScore >= 40 ? 'Medium Risk' : 'Low Risk',
+      components: riskComponents
+    }
+  }
+  
+  const dynamicRiskData = getDynamicRiskData()
+  const dynamicRiskScore = dynamicRiskData.score
+  const dynamicRiskLevel = dynamicRiskData.level
+  
+  const [simulationResults, setSimulationResults] = useState({
+    enrollmentProgress: [0, 12, 25, 38, 50, 50],
+    dropoutRates: [0, 3, 7, 12, 17, 17],
+    costSensitivity: [0, 15, 35, 60, 85, 100],
+    executionFragility: [10, 18, 28, 40, 52, 55],
+    enrollmentRate: 87.3,
+    dropoutRate: 22.7,
+    costEfficiency: 94.2,
+    riskScore: 72 // Default value, will be updated in useEffect
+  })
+
+  // Update simulation results when molecule inputs change
+  useEffect(() => {
+    setSimulationResults(prev => ({
+      ...prev,
+      riskScore: dynamicRiskScore
+    }))
+  }, [dynamicRiskScore])
+
+  const toggleComponent = (name: string) => {
+    setExpandedComponents(prev => ({
+      ...prev,
+      [name]: !prev[name]
+    }))
+  }
+
+  const calculateCircumference = (radius: number) => 2 * Math.PI * radius
+  const calculateStrokeDasharray = (radius: number, percentage: number) => {
+    const circumference = calculateCircumference(radius)
+    const strokeDasharray = circumference
+    const strokeDashoffset = circumference - (percentage / 100) * circumference
+    return { strokeDasharray, strokeDashoffset }
+  }
+
+  const { strokeDasharray, strokeDashoffset } = calculateStrokeDasharray(56, dynamicRiskScore)
+
+  const fetchRiskAnalysis = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/risk-analysis')
+      const data = await response.json()
+      setApiData(data)
+    } catch (error) {
+      console.error('Failed to fetch risk analysis:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const runSimulation = async () => {
+    setIsSimulationRunning(true)
+    try {
+      // Simulate API call for simulation
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Calculate new simulation results based on stress level and scenario
+      const stressMultiplier = stressLevel / 50 // Normalize to 0-2 range
+      const scenarioMultiplier = {
+        'Base Case': 1,
+        'Optimistic': 0.7,
+        'Pessimistic': 1.5,
+        'Pandemic Disruption': 2.0,
+        'Geographic Pivot': 1.3,
+        'Supply Chain Shock': 1.8
+      }[scenarioType] || 1
+      
+      const totalMultiplier = stressMultiplier * scenarioMultiplier
+      
+      // Generate new simulation data with scenario-specific effects
+      let newEnrollmentProgress, newDropoutRates, newCostSensitivity, newExecutionFragility
+      
+      // Base data that matches the screenshots
+      const baseEnrollment = [0, 12, 25, 38, 50, 50]
+      const baseDropout = [0, 3, 7, 12, 17, 17]
+      const baseCost = [0, 15, 35, 60, 85, 100]
+      const baseFragility = [10, 18, 28, 40, 52, 55]
+
+      if (scenarioType === 'Geographic Pivot') {
+        // Geographic pivot affects enrollment and cost more than other metrics
+        newEnrollmentProgress = baseEnrollment.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.5))
+        )
+        newDropoutRates = baseDropout.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.3))
+        )
+        newCostSensitivity = baseCost.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.4))
+        )
+        newExecutionFragility = baseFragility.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.2))
+        )
+      } else if (scenarioType === 'Supply Chain Shock') {
+        // Supply chain shock affects cost and fragility more than enrollment
+        newEnrollmentProgress = baseEnrollment.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.2))
+        )
+        newDropoutRates = baseDropout.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.4))
+        )
+        newCostSensitivity = baseCost.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.6))
+        )
+        newExecutionFragility = baseFragility.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.5))
+        )
+      } else {
+        // Standard simulation for other scenarios
+        newEnrollmentProgress = baseEnrollment.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.3))
+        )
+        newDropoutRates = baseDropout.map(val => 
+          Math.min(100, val * totalMultiplier)
+        )
+        newCostSensitivity = baseCost.map(val => 
+          Math.min(100, val * (1 + (totalMultiplier - 1) * 0.2))
+        )
+        newExecutionFragility = baseFragility.map(val => 
+          Math.min(100, val * totalMultiplier)
+        )
+      }
+      
+      // Calculate new metrics
+      const newEnrollmentRate = Math.max(50, Math.min(100, 87.3 * (1 - (totalMultiplier - 1) * 0.2)))
+      const newDropoutRate = Math.min(50, 22.7 * totalMultiplier)
+      const newCostEfficiency = Math.max(70, Math.min(100, 94.2 * (1 - (totalMultiplier - 1) * 0.1)))
+      const newRiskScore = Math.min(100, 62 * totalMultiplier)
+      
+      setSimulationResults({
+        enrollmentProgress: newEnrollmentProgress,
+        dropoutRates: newDropoutRates,
+        costSensitivity: newCostSensitivity,
+        executionFragility: newExecutionFragility,
+        enrollmentRate: newEnrollmentRate,
+        dropoutRate: newDropoutRate,
+        costEfficiency: newCostEfficiency,
+        riskScore: newRiskScore
+      })
+      
+
+    } catch (error) {
+      console.error('Simulation failed:', error)
+    } finally {
+      setIsSimulationRunning(false)
+    }
+  }
+
+  const resetSimulation = () => {
+    setStressLevel(50)
+    setScenarioType('Base Case')
+    setIsSimulationRunning(false)
+    setSimulationResults({
+      enrollmentProgress: [0, 12, 25, 38, 50, 50],
+      dropoutRates: [0, 3, 7, 12, 17, 17],
+      costSensitivity: [0, 15, 35, 60, 85, 100],
+      executionFragility: [10, 18, 28, 40, 52, 55],
+      enrollmentRate: 87.3,
+      dropoutRate: 22.7,
+      costEfficiency: 94.2,
+      riskScore: 62
+    })
+  }
+
+  // Helper function to determine if data is relevant to user inputs - REVERSED LOGIC
+  const isRelevantData = (data: string, fieldName: string) => {
+    if (!inputs || !analysis) return false // Don't show anything without user inputs
+    
+    // Check if the data is specific to the user's molecule inputs
+    const userInputs = [
+      inputs.geneSymbol?.toLowerCase(),
+      inputs.uniprotId?.toLowerCase(),
+      inputs.structureType?.toLowerCase(),
+      inputs.mechanism?.toLowerCase(),
+      inputs.route?.toLowerCase(),
+      inputs.indication?.toLowerCase(),
+      inputs.phase?.toLowerCase(),
+      inputs.type?.toLowerCase()
+    ].filter(Boolean)
+    
+    // If no user inputs, blur everything
+    if (userInputs.length === 0) return false
+    
+    // Check if the data contains user-specific information
+    const dataLower = data.toLowerCase()
+    const isUserSpecific = userInputs.some(input => 
+      dataLower.includes(input) || 
+      (input && dataLower.includes(input.replace(/\s+/g, '')))
+    )
+    
+    // Critical user fields - always show if they contain user data
+    const criticalUserFields = [
+      'geneSymbol', 'uniprotId', 'structureType', 'mechanism', 
+      'route', 'indication', 'phase', 'type', 'drugName'
+    ]
+    
+    if (criticalUserFields.includes(fieldName) && isUserSpecific) {
+      return true
+    }
+    
+    // For calculated/analyzed fields, show if they're realistic calculated values (not placeholders)
+    // These are what Gemini analyzes based on the optional inputs
+    const isRealisticCalculatedValue = 
+      (fieldName === 'molecularWeight' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'solubility' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'targetReceptor' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'halfLife' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'overallScore' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'countries' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'sites' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'duration' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'budget' && data !== 'Not specified' && data !== 'TBD') ||
+      // External factors specific fields
+      (fieldName === 'externalRiskScore' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'countriesMonitored' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'activeAlerts' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'disruptionRisk' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'geopoliticalRisk' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'supplyChainRisk' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'regulatoryRisk' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'fdaUpdates' && data !== 'Not specified' && data !== 'TBD') ||
+      (fieldName === 'emaUpdates' && data !== 'Not specified' && data !== 'TBD')
+    
+    // Show calculated values if they're realistic AND either user-specific OR properly calculated
+    return isRealisticCalculatedValue && (isUserSpecific || fieldName.includes('Score') || fieldName.includes('countries') || fieldName.includes('sites') || fieldName.includes('duration') || fieldName.includes('budget'))
+  }
+
+  // Helper function to determine if Gemini can handle this data - REVERSED LOGIC
+  const canGeminiHandle = (data: string, fieldName: string) => {
+    if (!analysis) return false
+    
+    // Check if data is empty or placeholder
+    const isEmptyOrPlaceholder = 
+      !data || 
+      data.trim() === '' || 
+      data === 'N/A' || 
+      data === 'TBD' || 
+      data === 'To be determined' ||
+      data === 'Not specified'
+    
+    if (isEmptyOrPlaceholder) return false
+    
+    // Check for truly generic/default values that indicate Gemini couldn't determine
+    const isTrulyGenericData = 
+      data.includes('standard') || data.includes('typical') || // Generic descriptions
+      data.includes('Not specified') || data.includes('TBD') || data.includes('To be determined')
+    
+    return !isTrulyGenericData
+  }
+
+  // Helper function to blur data - ONLY CONFIDENTIAL DATA
+  const blurData = (data: string, fieldName: string) => {
+    if (!analysis) return "—"
+    
+    // Check if data is irrelevant to user inputs
+    if (!isRelevantData(data, fieldName)) {
+      return "•••"
+    }
+    
+    // Check if Gemini can handle this data
+    if (!canGeminiHandle(data, fieldName)) {
+      return "•••"
+    }
+    
+    // Only blur confidential/proprietary data, not analyzed data
+    const shouldBlur = (field: string) => {
+      const confidentialFields = [
+        'protocolNumber', 'clinicalTrialsGov', 'budget', 'costEstimates',
+        'marketSize', 'timeline', 'selectedCRO', 'croStrengths', 'croExperience',
+        'croRiskFactors', 'manufacturing', 'competitiveLandscape', 'regulatoryPathway'
+      ]
+      return confidentialFields.includes(field)
+    }
+    
+    if (shouldBlur(fieldName)) {
+      return "•••"
+    }
+    
+    return data
+  }
+
+  // Helper function to get CSS classes for data relevance - SHOW ANALYZED DATA
+  const getDataClasses = (data: string, fieldName: string) => {
+    if (!analysis) return "text-gray-400" // No data - grayed out
+    
+    // Show analyzed data in green, blur only confidential data
+    if (!isRelevantData(data, fieldName) || !canGeminiHandle(data, fieldName)) {
+      return "text-gray-500" // Blurred data in subtle gray
+    }
+    
+    const shouldBlur = (field: string) => {
+      const confidentialFields = [
+        'protocolNumber', 'clinicalTrialsGov', 'budget', 'costEstimates',
+        'marketSize', 'timeline', 'selectedCRO', 'croStrengths', 'croExperience',
+        'croRiskFactors', 'manufacturing', 'competitiveLandscape', 'regulatoryPathway'
+      ]
+      return confidentialFields.includes(field)
+    }
+    
+    if (shouldBlur(fieldName)) {
+      return "text-gray-500" // Confidential data in subtle gray
+    }
+    
+    return "text-green-600 font-bold" // Analyzed data in bold green
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="border-b border-gray-200 px-6 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                Clinical Execution Risk Assessment
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Comprehensive operational risk analysis for clinical trials
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <a
+                href="/input-page"
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                <Zap className="h-4 w-4" />
+                AI Analysis Tool
+              </a>
+              <a
+                href="/ai-status"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                <Activity className="h-4 w-4" />
+                AI Status
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <p className="text-sm text-gray-700 leading-relaxed">
+            This report summarizes Convexia's Science Agent analysis of Ensifentrine (OHT‑202), an inhaled dual PDE3/PDE4 inhibitor for COPD. Results are derived from integrated dual‑enzyme binding models, pulmonary PK/PD deposition simulations, safety projection analytics, and a trial‑execution digital twin—computed in hours on high‑performance GPUs.
+          </p>
+        </div>
+
+        {/* AI Analysis Status */}
+        {analysis && (
+          <div className="px-6 py-4 bg-green-50 border-b border-green-200">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-green-900">AI Analysis Active</h3>
+              <span className="text-xs text-green-600">Model: {analysis.modelUsed || 'Gemini 1.5 Flash'}</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-green-800">
+              <div><span className="font-medium">Drug Name:</span> {analysis.drugName}</div>
+              <div><span className="font-medium">Risk Score:</span> {analysis.riskAssessment.overallScore}</div>
+              <div><span className="font-medium">Processing Time:</span> {analysis.processingTime}</div>
+              <div><span className="font-medium">Blurred Data:</span> {Object.keys(analysis.blurredData).length} fields</div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Analysis Prompt */}
+        {!analysis && (inputs.geneSymbol || inputs.structureType || inputs.route) && (
+          <div className="px-6 py-4 bg-blue-50 border-b border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-blue-900">AI Analysis Available</h3>
+                <p className="text-xs text-blue-700 mt-1">You have molecule inputs ready for AI analysis</p>
+              </div>
+              <a
+                href="/input-page"
+                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+              >
+                <Zap className="h-4 w-4" />
+                Generate Analysis
+              </a>
+            </div>
+          </div>
+        )}
+        
+
+
+        <div className="p-6">
+          <div className="space-y-6">
+            {/* Trial Card */}
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm border-l-4 border-l-gray-400 cursor-pointer hover:bg-gray-50">
+              <div className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">{drugName}</h2>
+                    <p className="text-sm text-gray-600">{currentData.clinicalInfo.indication} • {currentData.clinicalInfo.phase} • {currentData.clinicalInfo.type}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="text-3xl font-bold text-gray-900 transition-all duration-300">
+                        {analysis ? analysis.riskAssessment.overallScore : dynamicRiskScore}
+                        {analysis && analysis.riskAssessment.overallScore !== 72 && (
+                          <span className="text-sm text-blue-600 ml-1">
+                            ({analysis.riskAssessment.overallScore > 72 ? '+' : ''}{analysis.riskAssessment.overallScore - 72})
+                          </span>
+                        )}
+                      </div>
+                      <div className={cn(
+                        "px-2 py-1 text-xs font-medium rounded-full transition-all duration-300",
+                        (analysis ? analysis.riskAssessment.riskLevel : dynamicRiskLevel) === 'High Risk' ? 'bg-red-100 text-red-800' :
+                        (analysis ? analysis.riskAssessment.riskLevel : dynamicRiskLevel) === 'Medium Risk' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
+                      )}>
+                        {analysis ? analysis.riskAssessment.riskLevel : dynamicRiskLevel}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setExpandedTrial(!expandedTrial)}
+                      className="text-gray-500 transition-transform"
+                    >
+                      {expandedTrial ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Data Relevance Legend */}
+                {analysis && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Data Status:</div>
+                    <div className="flex flex-wrap gap-4 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-green-600 rounded"></div>
+                        <span>Available data</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                        <span>Blurred</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Warning when no user inputs */}
+                {analysis && (!inputs || Object.keys(inputs).length === 0) && (
+                  <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="text-sm font-medium text-gray-700 mb-1">⚠️ No Molecule Inputs</div>
+                    <div className="text-xs text-gray-600">
+                      Enter your molecule details to see available data. Most information is currently blurred.
+                    </div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div className="text-center">
+                    <div className={`text-lg font-semibold ${getDataClasses(currentData.trialMetrics?.countries?.toString() || '15', 'countries')}`}>
+                      {blurData(currentData.trialMetrics?.countries?.toString() || '15', 'countries')}
+                    </div>
+                    <div className="text-sm text-gray-600">Countries</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-lg font-semibold ${getDataClasses(currentData.trialMetrics?.sites?.toString() || '85', 'sites')}`}>
+                      {blurData(currentData.trialMetrics?.sites?.toString() || '85', 'sites')}
+                    </div>
+                    <div className="text-sm text-gray-600">Sites</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-lg font-semibold ${getDataClasses(currentData.trialMetrics?.duration || '24 months', 'duration')}`}>
+                      {blurData(currentData.trialMetrics?.duration || '24 months', 'duration')}
+                    </div>
+                    <div className="text-sm text-gray-600">Duration</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-lg font-semibold ${getDataClasses(currentData.trialMetrics?.budget || '$78,000,000', 'budget')}`}>
+                      {blurData(currentData.trialMetrics?.budget || '$78,000,000', 'budget')}
+                    </div>
+                    <div className="text-sm text-gray-600">Budget</div>
+                  </div>
+                </div>
+              </div>
+
+              {expandedTrial && (
+                <div className="p-6 pt-0 border-t border-gray-100">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-900">Molecular Details</h3>
+                        <button
+                          onClick={() => setIsEditingMolecule(!isEditingMolecule)}
+                          className="flex items-center gap-2 px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors"
+                        >
+                          {isEditingMolecule ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                          {isEditingMolecule ? 'Cancel' : 'Edit'}
+                        </button>
+                      </div>
+                      
+                      {isEditingMolecule ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Gene Symbol</label>
+                              <input
+                                type="text"
+                                value={moleculeInputs.geneSymbol}
+                                onChange={(e) => updateInputs({ geneSymbol: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">UniProt ID</label>
+                              <input
+                                type="text"
+                                value={moleculeInputs.uniprotId}
+                                onChange={(e) => updateInputs({ uniprotId: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Structure Type</label>
+                            <select
+                              value={moleculeInputs.structureType}
+                              onChange={(e) => updateInputs({ structureType: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Small molecule</option>
+                              <option>Biologic</option>
+                              <option>Antibody</option>
+                              <option>Peptide</option>
+                              <option>Gene therapy</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Mechanism</label>
+                            <input
+                              type="text"
+                              value={moleculeInputs.mechanism}
+                              onChange={(e) => updateInputs({ mechanism: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., PDE3/4 inhibitor, receptor agonist"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Route of Administration</label>
+                            <select
+                              value={moleculeInputs.route}
+                              onChange={(e) => updateInputs({ route: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Oral</option>
+                              <option>Inhalation</option>
+                              <option>Intravenous</option>
+                              <option>Subcutaneous</option>
+                              <option>Intramuscular</option>
+                              <option>Topical</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Indication</label>
+                            <input
+                              type="text"
+                              value={moleculeInputs.indication}
+                              onChange={(e) => updateInputs({ indication: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., COPD with chronic bronchitis"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phase</label>
+                            <select
+                              value={moleculeInputs.phase}
+                              onChange={(e) => updateInputs({ phase: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Phase I</option>
+                              <option>Phase II</option>
+                              <option>Phase III</option>
+                              <option>Phase IV</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Drug Type</label>
+                            <select
+                              value={moleculeInputs.type}
+                              onChange={(e) => updateInputs({ type: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option>Inhaled Small Molecule</option>
+                              <option>Oral Small Molecule</option>
+                              <option>Injectable Biologic</option>
+                              <option>Monoclonal Antibody</option>
+                              <option>Gene Therapy</option>
+                            </select>
+                          </div>
+                          
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              onClick={() => setIsEditingMolecule(false)}
+                              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                            >
+                              <Save className="h-4 w-4" />
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={() => {
+                                updateInputs({
+                                  geneSymbol: trialData.molecularDetails.geneSymbol,
+                                  uniprotId: trialData.molecularDetails.uniprotId,
+                                  structureType: trialData.molecularDetails.structureType,
+                                  mechanism: trialData.molecularDetails.mechanism,
+                                  route: trialData.molecularDetails.route,
+                                  indication: trialData.indication,
+                                  phase: trialData.phase,
+                                  type: trialData.type
+                                })
+                                setIsEditingMolecule(false)
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                            >
+                              <X className="h-4 w-4" />
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-sm">
+                          <div><span className="font-medium">Gene Symbol:</span> {currentData.molecularDetails.geneSymbol}</div>
+                          <div><span className="font-medium">UniProt ID:</span> {currentData.molecularDetails.uniprotId}</div>
+                          <div><span className="font-medium">Structure Type:</span> {currentData.molecularDetails.structureType}</div>
+                          <div><span className="font-medium">Mechanism:</span> {currentData.molecularDetails.mechanism}</div>
+                          <div><span className="font-medium">Route:</span> {currentData.molecularDetails.route}</div>
+                          <div><span className="font-medium">Molecular Weight:</span> <span className={getDataClasses(currentData.molecularDetails.molecularWeight || 'Not specified', 'molecularWeight')}>{blurData(currentData.molecularDetails.molecularWeight || 'Not specified', 'molecularWeight')}</span></div>
+                          <div><span className="font-medium">Solubility:</span> <span className={getDataClasses(currentData.molecularDetails.solubility || 'Not specified', 'solubility')}>{blurData(currentData.molecularDetails.solubility || 'Not specified', 'solubility')}</span></div>
+                          <div><span className="font-medium">Target Receptor:</span> <span className={getDataClasses(currentData.molecularDetails.targetReceptor || 'Not specified', 'targetReceptor')}>{blurData(currentData.molecularDetails.targetReceptor || 'Not specified', 'targetReceptor')}</span></div>
+                          <div><span className="font-medium">Half-Life:</span> <span className={getDataClasses(currentData.molecularDetails.halfLife || 'Not specified', 'halfLife')}>{blurData(currentData.molecularDetails.halfLife || 'Not specified', 'halfLife')}</span></div>
+                          <div><span className="font-medium">Indication:</span> {currentData.clinicalInfo.indication}</div>
+                          <div><span className="font-medium">Phase:</span> {currentData.clinicalInfo.phase}</div>
+                          <div><span className="font-medium">Drug Type:</span> {currentData.clinicalInfo.type}</div>
+                          <div><span className="font-medium">Selected CRO:</span> {currentData.croAnalysis?.selectedCRO || 'Medpace Holdings Inc'}</div>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-3">Trial Information</h3>
+                      <div className="space-y-2 text-sm">
+                        <div><span className="font-medium">Study Design:</span> {currentData.clinicalInfo.studyDesign}</div>
+                        <div><span className="font-medium">Primary Endpoint:</span> {currentData.clinicalInfo.primaryEndpoint}</div>
+                        <div><span className="font-medium">Patient Population:</span> {currentData.clinicalInfo.patientPopulation}</div>
+                        <div><span className="font-medium">Protocol Number:</span> {blurData(currentData.clinicalInfo.protocolNumber, 'protocolNumber')}</div>
+                        <div><span className="font-medium">ClinicalTrials.gov:</span> {blurData(currentData.clinicalInfo.clinicalTrialsGov, 'clinicalTrialsGov')}</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Risk Impact Analysis */}
+                  {isEditingMolecule && (
+                    <div className="p-6 pt-0 border-t border-gray-100">
+                      <h4 className="font-semibold text-gray-900 mb-4">Risk Impact Analysis</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-medium text-gray-700">Risk Factors</h5>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span>Gene Symbol Complexity:</span>
+                              <span className={moleculeInputs.geneSymbol.length > 6 ? 'text-red-600' : 'text-green-600'}>
+                                {moleculeInputs.geneSymbol.length > 6 ? '+5' : '0'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Structure Type:</span>
+                              <span className={
+                                moleculeInputs.structureType === 'Small molecule' ? 'text-green-600' :
+                                moleculeInputs.structureType === 'Biologic' ? 'text-red-600' :
+                                moleculeInputs.structureType === 'Antibody' ? 'text-red-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.structureType === 'Small molecule' ? '-2' :
+                                 moleculeInputs.structureType === 'Biologic' ? '+8' :
+                                 moleculeInputs.structureType === 'Antibody' ? '+12' : '0'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Mechanism Complexity:</span>
+                              <span className={
+                                moleculeInputs.mechanism.includes('dual') || moleculeInputs.mechanism.includes('multiple') ? 'text-red-600' : 'text-green-600'
+                              }>
+                                {moleculeInputs.mechanism.includes('dual') || moleculeInputs.mechanism.includes('multiple') ? '+5' : '-2'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Route of Administration:</span>
+                              <span className={
+                                moleculeInputs.route === 'Oral' ? 'text-green-600' :
+                                moleculeInputs.route === 'Inhalation' ? 'text-yellow-600' :
+                                moleculeInputs.route === 'Intravenous' ? 'text-red-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.route === 'Oral' ? '-5' :
+                                 moleculeInputs.route === 'Inhalation' ? '+3' :
+                                 moleculeInputs.route === 'Intravenous' ? '+8' : '0'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Indication Complexity:</span>
+                              <span className={
+                                moleculeInputs.indication.includes('cancer') || moleculeInputs.indication.includes('oncology') ? 'text-red-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.indication.includes('cancer') || moleculeInputs.indication.includes('oncology') ? '+15' : '+2'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Phase Impact:</span>
+                              <span className={
+                                moleculeInputs.phase === 'Phase I' ? 'text-green-600' :
+                                moleculeInputs.phase === 'Phase II' ? 'text-green-600' :
+                                moleculeInputs.phase === 'Phase III' ? 'text-yellow-600' :
+                                moleculeInputs.phase === 'Phase IV' ? 'text-green-600' : 'text-yellow-600'
+                              }>
+                                {moleculeInputs.phase === 'Phase I' ? '-10' :
+                                 moleculeInputs.phase === 'Phase II' ? '-5' :
+                                 moleculeInputs.phase === 'Phase III' ? '0' :
+                                 moleculeInputs.phase === 'Phase IV' ? '-8' : '0'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-medium text-gray-700">Risk Summary</h5>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span>Base Risk Score:</span>
+                              <span className="text-gray-600">72</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Total Modifiers:</span>
+                              <span className={dynamicRiskScore - 72 > 0 ? 'text-red-600' : 'text-green-600'}>
+                                {dynamicRiskScore - 72 > 0 ? '+' : ''}{dynamicRiskScore - 72}
+                              </span>
+                            </div>
+                            <div className="border-t border-gray-200 pt-2">
+                              <div className="flex justify-between font-medium">
+                                <span>Final Risk Score:</span>
+                                <span className={dynamicRiskLevel === 'High Risk' ? 'text-red-600' : 
+                                                 dynamicRiskLevel === 'Medium Risk' ? 'text-yellow-600' : 'text-green-600'}>
+                                  {dynamicRiskScore}/100
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>Risk Level:</span>
+                                <span className={dynamicRiskLevel === 'High Risk' ? 'text-red-600' : 
+                                                 dynamicRiskLevel === 'Medium Risk' ? 'text-yellow-600' : 'text-green-600'}>
+                                  {dynamicRiskLevel}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Tabs */}
+            <div className="space-y-6">
+              <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                <div className="p-6 pt-6">
+                  <div className="grid w-full grid-cols-7 bg-gray-100 rounded-md p-1">
+                    {tabs.map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={cn(
+                          "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+                          activeTab === tab
+                            ? "text-foreground shadow-sm bg-white"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              {activeTab === 'Overview' && (
+                <div className="space-y-6">
+                  {/* Overall Risk Assessment */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Overall Execution Risk Assessment
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Comprehensive analysis of operational factors affecting OHT-202 COPD trial success probability
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0">
+                      <div className="flex items-center justify-center mb-6">
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-32 h-32">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="56"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="56"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={strokeDasharray}
+                                strokeDashoffset={strokeDashoffset}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 ease-in-out"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-bold text-gray-900 text-2xl transition-all duration-300">
+                                {dynamicRiskScore}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-2">Risk Score</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk Component Analysis */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Risk Component Analysis
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Click each component to view detailed analysis, data sources, and recommendations
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-3">
+                      {dynamicRiskData.components.map((component) => (
+                        <div
+                          key={component.name}
+                          className="rounded-lg bg-card text-card-foreground shadow-sm border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(component.name)}
+                        >
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium text-gray-900">{component.name}</span>
+                                <span className="text-sm font-bold text-gray-700">{component.score}/100</span>
+                              </div>
+                              <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[component.name] && "rotate-180")} />
+                            </div>
+                            <p className="text-sm text-gray-600 mt-2">{component.description}</p>
+                            
+                            {expandedComponents[component.name] && (
+                              <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Detailed Analysis</h5>
+                                  <p className="text-sm text-gray-700">{component.detailedAnalysis}</p>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Recommendations</h5>
+                                  <ul className="text-sm text-gray-700 space-y-1">
+                                    {component.recommendations.map((rec: string, index: number) => (
+                                      <li key={index} className="flex items-start gap-2">
+                                        <span className="text-gray-400 mt-1">•</span>
+                                        <span>{rec}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Recommended Actions */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Recommended Actions
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Prioritized interventions to reduce execution risk and improve trial success probability
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-3">
+                      {recommendedActions.map((action) => (
+                        <div
+                          key={action.name}
+                          className="rounded-lg bg-card text-card-foreground shadow-sm border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(action.name)}
+                        >
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium text-gray-900">{action.name}</span>
+                                <span className={cn("px-2 py-1 text-xs font-medium rounded border", action.priorityColor)}>
+                                  {action.priority}
+                                </span>
+                              </div>
+                              <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[action.name] && "rotate-180")} />
+                            </div>
+                            
+                            {expandedComponents[action.name] && (
+                              <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Strategic Rationale</h5>
+                                  <p className="text-sm text-gray-700">{action.strategicRationale}</p>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Business Case</h5>
+                                  <p className="text-sm text-gray-700">{action.businessCase}</p>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Risk Mitigation</h5>
+                                  <p className="text-sm text-gray-700">{action.riskMitigation}</p>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div>
+                                    <h6 className="font-medium text-gray-900 mb-1">Budget Impact</h6>
+                                    <p className="text-sm text-gray-700">{action.budgetImpact}</p>
+                                  </div>
+                                  <div>
+                                    <h6 className="font-medium text-gray-900 mb-1">Timeline Impact</h6>
+                                    <p className="text-sm text-gray-700">{action.timelineImpact}</p>
+                                  </div>
+                                  <div>
+                                    <h6 className="font-medium text-gray-900 mb-1">Success Probability</h6>
+                                    <p className="text-sm text-gray-700">{action.successProbability}</p>
+                                  </div>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-3">Detailed Implementation Plan</h5>
+                                  <div className="space-y-4">
+                                    {action.detailedImplementationPlan.map((phase, index) => (
+                                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                          <h6 className="font-medium text-gray-900">{phase.phase}</h6>
+                                          <span className="text-sm text-gray-600">{phase.timeline}</span>
+                                        </div>
+                                        
+                                        <div className="space-y-3">
+                                          <div>
+                                            <h6 className="font-medium text-gray-800 mb-1">Activities</h6>
+                                            <ul className="text-sm text-gray-700 space-y-1">
+                                              {phase.activities.map((activity, actIndex) => (
+                                                <li key={actIndex} className="flex items-start gap-2">
+                                                  <span className="text-gray-400 mt-1">•</span>
+                                                  <span>{activity}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                          
+                                          <div>
+                                            <h6 className="font-medium text-gray-800 mb-1">Required Resources</h6>
+                                            <ul className="text-sm text-gray-700 space-y-1">
+                                              {phase.requiredResources.map((resource, resIndex) => (
+                                                <li key={resIndex} className="flex items-start gap-2">
+                                                  <span className="text-gray-400 mt-1">•</span>
+                                                  <span>{resource}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                          
+                                          <div>
+                                            <h6 className="font-medium text-gray-800 mb-1">Key Risks</h6>
+                                            <ul className="text-sm text-gray-700 space-y-1">
+                                              {phase.keyRisks.map((risk, riskIndex) => (
+                                                <li key={riskIndex} className="flex items-start gap-2">
+                                                  <span className="text-gray-400 mt-1">•</span>
+                                                  <span>{risk}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Success Metrics & KPIs</h5>
+                                  <ul className="text-sm text-gray-700 space-y-1">
+                                    {action.successMetrics.map((metric, index) => (
+                                      <li key={index} className="flex items-start gap-2">
+                                        <span className="text-gray-400 mt-1">•</span>
+                                        <span>{metric}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Historical Precedent & Validation</h5>
+                                  <p className="text-sm text-gray-700">{action.historicalPrecedent}</p>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Supporting Data Sources & Evidence</h5>
+                                  <ul className="text-sm text-gray-700 space-y-1">
+                                    {action.supportingDataSources.map((source, index) => (
+                                      <li key={index} className="flex items-start gap-2">
+                                        <span className="text-gray-400 mt-1">•</span>
+                                        <span>{source}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Digital Twin Tab Content */}
+              {activeTab === 'Digital Twin' && (
+                <div className="space-y-6">
+                  {/* Digital Twin Simulation Framework */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-semibold leading-none tracking-tight">
+                            Digital Twin Simulation Framework
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Agent-based Monte Carlo modeling of OHT-202 ENHANCE trials with validated dropout and enrollment predictions
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-24 h-24">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={276.46}
+                                strokeDashoffset={276.46 - (276.46 * simulationResults.riskScore / 100)}
+                                strokeLinecap="round"
+                                className="transition-all duration-1000 ease-in-out"
+                              />
+                            </svg>
+                                                      <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="font-bold text-gray-900 text-xl transition-all duration-1000 ease-in-out">
+                              {Math.round(simulationResults.riskScore)}
+                            </span>
+                          </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-1">Risk Score</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="rounded-lg bg-gray-50 p-4">
+                          <h4 className="font-medium text-gray-900 mb-2">Validated Results</h4>
+                          <p className="text-sm text-gray-700">ENHANCE-1: 84.5% completion, ENHANCE-2: 77.3% completion</p>
+                        </div>
+                        <div className="rounded-lg bg-gray-50 p-4">
+                          <h4 className="font-medium text-gray-900 mb-2">Modeling Methods</h4>
+                          <p className="text-sm text-gray-700">Agent-based, Monte Carlo, Bayesian dropout prediction</p>
+                        </div>
+                        <div className="rounded-lg bg-gray-50 p-4">
+                          <h4 className="font-medium text-gray-900 mb-2">FDA Approval</h4>
+                          <p className="text-sm text-gray-700">June 26, 2024 - First cycle, no AdCom required</p>
+                        </div>
+                      </div>
+
+                      {/* Simulation Controls */}
+                      <div className="space-y-4 border-t border-gray-100 pt-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Stress Level</label>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={stressLevel}
+                                onChange={(e) => setStressLevel(parseInt(e.target.value))}
+                                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                              />
+                              <span className="text-sm text-gray-600 w-24">{stressLevel}% operational stress</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Scenario Type</label>
+                            <select 
+                              value={scenarioType}
+                              onChange={(e) => setScenarioType(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                            >
+                              <option>Base Case</option>
+                              <option>Optimistic</option>
+                              <option>Pessimistic</option>
+                              <option>Pandemic Disruption</option>
+                              <option>Geographic Pivot</option>
+                              <option>Supply Chain Shock</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={runSimulation}
+                            disabled={isSimulationRunning}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isSimulationRunning ? (
+                              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                            {isSimulationRunning ? 'Running...' : 'Run Simulation'}
+                          </button>
+                          <button 
+                            onClick={resetSimulation}
+                            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Reset
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Simulation Graphs */}
+                      <div className="grid grid-cols-2 gap-4 mt-6">
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3">Enrollment Progress</h4>
+                          <div className="h-32 bg-gray-50 rounded relative">
+                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              {/* Grid lines */}
+                              <line x1="0" y1="25" x2="100" y2="25" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="50" x2="100" y2="50" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="75" x2="100" y2="75" stroke="#e5e7eb" strokeWidth="0.5" />
+                              
+                              {/* Line graph */}
+                              <polyline
+                                fill="none"
+                                stroke="#3b82f6"
+                                strokeWidth="2"
+                                points={simulationResults.enrollmentProgress.map((value, index) => 
+                                  `${(index * 20)},${100 - value}`
+                                ).join(' ')}
+                                className="transition-all duration-1000 ease-in-out"
+                              />
+                              
+                              {/* Data points */}
+                              {simulationResults.enrollmentProgress.map((value, index) => (
+                                <circle
+                                  key={index}
+                                  cx={index * 20}
+                                  cy={100 - value}
+                                  r="2"
+                                  fill="#3b82f6"
+                                  className="transition-all duration-1000 ease-in-out"
+                                />
+                              ))}
+                            </svg>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0</span>
+                            <span>6</span>
+                            <span>12</span>
+                            <span>18</span>
+                            <span>24</span>
+                          </div>
+                        </div>
+                        
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3">Patient Dropout Rates</h4>
+                          <div className="h-32 bg-gray-50 rounded relative">
+                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              {/* Grid lines */}
+                              <line x1="0" y1="25" x2="100" y2="25" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="50" x2="100" y2="50" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="75" x2="100" y2="75" stroke="#e5e7eb" strokeWidth="0.5" />
+                              
+                              {/* Line graph */}
+                              <polyline
+                                fill="none"
+                                stroke="#ef4444"
+                                strokeWidth="2"
+                                points={simulationResults.dropoutRates.map((value, index) => 
+                                  `${(index * 20)},${100 - value}`
+                                ).join(' ')}
+                                className="transition-all duration-1000 ease-in-out"
+                              />
+                              
+                              {/* Data points */}
+                              {simulationResults.dropoutRates.map((value, index) => (
+                                <circle
+                                  key={index}
+                                  cx={index * 20}
+                                  cy={100 - value}
+                                  r="2"
+                                  fill="#ef4444"
+                                  className="transition-all duration-1000 ease-in-out"
+                                />
+                              ))}
+                            </svg>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0</span>
+                            <span>6</span>
+                            <span>12</span>
+                            <span>18</span>
+                            <span>24</span>
+                          </div>
+                        </div>
+                        
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3">Cost Sensitivity</h4>
+                          <div className="h-32 bg-gray-50 rounded relative">
+                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              {/* Grid lines */}
+                              <line x1="0" y1="25" x2="100" y2="25" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="50" x2="100" y2="50" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="75" x2="100" y2="75" stroke="#e5e7eb" strokeWidth="0.5" />
+                              
+                              {/* Line graph */}
+                              <polyline
+                                fill="none"
+                                stroke="#10b981"
+                                strokeWidth="2"
+                                points={simulationResults.costSensitivity.map((value, index) => 
+                                  `${(index * 20)},${100 - value}`
+                                ).join(' ')}
+                                className="transition-all duration-1000 ease-in-out"
+                              />
+                              
+                              {/* Data points */}
+                              {simulationResults.costSensitivity.map((value, index) => (
+                                <circle
+                                  key={index}
+                                  cx={index * 20}
+                                  cy={100 - value}
+                                  r="2"
+                                  fill="#10b981"
+                                  className="transition-all duration-1000 ease-in-out"
+                                />
+                              ))}
+                            </svg>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0</span>
+                            <span>6</span>
+                            <span>12</span>
+                            <span>18</span>
+                            <span>24</span>
+                          </div>
+                        </div>
+                        
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3">Execution Fragility</h4>
+                          <div className="h-32 bg-gray-50 rounded relative">
+                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              {/* Grid lines */}
+                              <line x1="0" y1="25" x2="100" y2="25" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="50" x2="100" y2="50" stroke="#e5e7eb" strokeWidth="0.5" />
+                              <line x1="0" y1="75" x2="100" y2="75" stroke="#e5e7eb" strokeWidth="0.5" />
+                              
+                              {/* Line graph */}
+                              <polyline
+                                fill="none"
+                                stroke="#f59e0b"
+                                strokeWidth="2"
+                                points={simulationResults.executionFragility.map((value, index) => 
+                                  `${(index * 20)},${100 - value}`
+                                ).join(' ')}
+                                className="transition-all duration-1000 ease-in-out"
+                              />
+                              
+                              {/* Data points */}
+                              {simulationResults.executionFragility.map((value, index) => (
+                                <circle
+                                  key={index}
+                                  cx={index * 20}
+                                  cy={100 - value}
+                                  r="2"
+                                  fill="#f59e0b"
+                                  className="transition-all duration-1000 ease-in-out"
+                                />
+                              ))}
+                            </svg>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0</span>
+                            <span>6</span>
+                            <span>12</span>
+                            <span>18</span>
+                            <span>24</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Additional Simulation Metrics */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-blue-900">Enrollment Rate</p>
+                              <p className="text-2xl font-bold text-blue-700 transition-all duration-1000 ease-in-out">
+                                {simulationResults.enrollmentRate.toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-red-900">Dropout Rate</p>
+                              <p className="text-2xl font-bold text-red-700 transition-all duration-1000 ease-in-out">
+                                {simulationResults.dropoutRate.toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-green-900">Cost Efficiency</p>
+                              <p className="text-2xl font-bold text-green-700 transition-all duration-1000 ease-in-out">
+                                {simulationResults.costEfficiency.toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-yellow-900">Risk Score</p>
+                              <p className="text-2xl font-bold text-yellow-700 transition-all duration-1000 ease-in-out">
+                                {Math.round(simulationResults.riskScore)}
+                              </p>
+                            </div>
+                            <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Simulation Components & Methodology */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Simulation Components & Methodology
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Click each component to view modeling approach, validation results, and data sources
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-3">
+                      {digitalTwinComponents.map((component) => (
+                        <div
+                          key={component.name}
+                          className="rounded-lg bg-card text-card-foreground shadow-sm border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(component.name)}
+                        >
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium text-gray-900">{component.name}</span>
+                              </div>
+                              <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[component.name] && "rotate-180")} />
+                            </div>
+                            <p className="text-sm text-gray-600 mt-2">{component.description}</p>
+                            
+                            {expandedComponents[component.name] && (
+                              <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Modeling Approach</h5>
+                                  <p className="text-sm text-gray-700">{component.modelingApproach}</p>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Validation Results</h5>
+                                  <p className="text-sm text-gray-700">{component.validationResults}</p>
+                                </div>
+                                
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Data Sources</h5>
+                                  <ul className="text-sm text-gray-700 space-y-1">
+                                    {component.dataSources.map((source, index) => (
+                                      <li key={index} className="flex items-start gap-2">
+                                        <span className="text-gray-400 mt-1">•</span>
+                                        <span>{source}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CRO Analysis Tab Content */}
+              {activeTab === 'CRO Analysis' && (
+                <div className="space-y-6">
+                  {/* CRO Performance Assessment */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-semibold leading-none tracking-tight">
+                            CRO Performance Assessment
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Structured analysis of {analysis?.croAnalysis?.selectedCRO || 'Selected CRO'} across key performance dimensions
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-24 h-24">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={276.46}
+                                strokeDashoffset={276.46 - (276.46 * (analysis?.croAnalysis?.selectedCRO ? 68 : 65) / 100)}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 ease-in-out"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-bold text-gray-900 text-xl">{analysis?.croAnalysis?.selectedCRO ? 68 : 65}</span>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-1">Risk Score</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Left Column */}
+                        <div className="space-y-4">
+                          {/* CRO Strengths */}
+                          <div className="rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">CRO Strengths</h4>
+                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">Strengths</span>
+                            </div>
+                            <p className="text-sm text-gray-700 mb-3">
+                              {analysis?.croAnalysis?.croStrengths || 'Specialized expertise in clinical trial management and regulatory compliance'}
+                            </p>
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-600">
+                                  {analysis?.croAnalysis?.croStrengths || 'Comprehensive clinical trial expertise with strong regulatory knowledge and global site network capabilities.'}
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Operational Impact</h5>
+                                <p className="text-sm text-gray-600">
+                                  Enhanced trial execution efficiency, reduced regulatory delays, and improved site activation timelines through established relationships and expertise.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* CRO Risk Factors */}
+                          <div className="rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">CRO Risk Factors</h4>
+                              <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded">Risk Factors</span>
+                            </div>
+                            <p className="text-sm text-gray-700 mb-3">
+                              {analysis?.croAnalysis?.croRiskFactors || 'Standard CRO risk factors with manageable mitigation strategies'}
+                            </p>
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-600">
+                                  {analysis?.croAnalysis?.croRiskFactors || 'Identified risk factors include resource allocation challenges, regulatory compliance variations, and potential timeline delays in certain regions.'}
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Operational Impact</h5>
+                                <p className="text-sm text-gray-600">
+                                  Potential delays in site activation, regulatory submissions, and data collection timelines. Mitigation strategies include enhanced monitoring and contingency planning.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* CRO Experience */}
+                          <div className="rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">CRO Experience</h4>
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">Experience</span>
+                            </div>
+                            <p className="text-sm text-gray-700 mb-3">
+                              {analysis?.croAnalysis?.croExperience || 'Extensive experience in clinical trial management across multiple therapeutic areas'}
+                            </p>
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-600">
+                                  {analysis?.croAnalysis?.croExperience || 'Proven track record in clinical trial execution with successful completion of multiple studies across various therapeutic areas and regulatory environments.'}
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Operational Impact</h5>
+                                <p className="text-sm text-gray-600">
+                                  Enhanced trial execution efficiency, reduced regulatory delays, and improved site activation timelines through established relationships and expertise.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* CRO Performance Metrics */}
+                          <div className="rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">Performance Metrics</h4>
+                              <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">Metrics</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 mb-3">
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-gray-900">15+</div>
+                                <div className="text-xs text-gray-600">Radioligand Trials</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-gray-900">VISION</div>
+                                <div className="text-xs text-gray-600">PSMA Trial</div>
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Nuclear Medicine Expertise</h5>
+                                <p className="text-sm text-gray-600">
+                                  Specialized expertise in nuclear medicine trials and radioligand therapy protocols, including the successful VISION trial for PSMA-targeted therapy.
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Global Network</h5>
+                                <p className="text-sm text-gray-600">
+                                  Extensive global site network with nuclear medicine capabilities across multiple regions and regulatory environments.
+                                </p>
+                                                            </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Data Sources</h5>
+                                <ul className="text-sm text-gray-600 space-y-1">
+                                  <li>• QA Audit Schedule</li>
+                                  <li>• CAPA Tracking System</li>
+                                  <li>• Escalation Protocol</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Column */}
+                        <div className="space-y-4">
+                          {/* Enhanced Oversight Implementation */}
+                          <div className="rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">Enhanced Oversight Implementation</h4>
+                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">Active Mitigation</span>
+                            </div>
+                            <p className="text-sm text-gray-700 mb-3">
+                              Weekly milestone reviews, independent DMC, and targeted GCP retraining implemented to address performance gaps
+                            </p>
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-600">
+                                  Implementation of enhanced oversight cadence, KPI dashboards, the addition of an Independent Data Monitoring Committee (DMC), and targeted GCP retraining that led to a drop in deviation rates.
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Operational Impact</h5>
+                                <p className="text-sm text-gray-600">
+                                  Mitigation strategies successfully reduced deviation rates and improved milestone adherence, with contingency CRO evaluation completed for high-risk geographies.
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Data Sources</h5>
+                                <ul className="text-sm text-gray-600 space-y-1">
+                                  <li>• Weekly KPI Dashboard</li>
+                                  <li>• DMC Charter Documentation</li>
+                                  <li>• GCP Training Records</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Timeline Reliability Assessment */}
+                          <div className="rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">Timeline Reliability Assessment</h4>
+                              <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded">67% Success Rate</span>
+                            </div>
+                            <p className="text-sm text-gray-700 mb-3">
+                              Phase III success rate below industry benchmark with regional performance variations requiring enhanced oversight
+                            </p>
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-600">
+                                  Medpace's 67% Phase III success rate (vs. 75% benchmark) points to execution quality concerns, particularly in Eastern Europe due to SOP deviations and milestone adherence issues.
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Operational Impact</h5>
+                                <p className="text-sm text-gray-600">
+                                  The below-benchmark success rate increases timeline risk and requires additional sponsor oversight resources, leading to uneven execution quality across the global trial network.
+                                </p>
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Data Sources</h5>
+                                <ul className="text-sm text-gray-600 space-y-1">
+                                  <li>• Industry Benchmarking Database</li>
+                                  <li>• Regional Performance Analysis</li>
+                                  <li>• Milestone Tracking System</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommended CRO Alternatives */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Recommended CRO Alternatives
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Performance-based CRO recommendations with therapeutic alignment and comprehensive risk assessment
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-4">
+                      {croAlternatives.map((cro) => (
+                        <div
+                          key={cro.name}
+                          className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(cro.name)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <h4 className="font-medium text-gray-900">{cro.name}</h4>
+                                <span className="text-sm text-gray-600">Score: {cro.score}/100</span>
+                              </div>
+                            </div>
+                            <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[cro.name] && "rotate-180")} />
+                          </div>
+                          <p className="text-sm text-gray-700 mt-2">{cro.description}</p>
+                          
+                          {expandedComponents[cro.name] && (
+                            <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Key Strengths</h5>
+                                <ul className="text-sm text-gray-700 space-y-1">
+                                  {cro.keyStrengths.map((strength, index) => (
+                                    <li key={index} className="flex items-start gap-2">
+                                      <span className="text-green-500 mt-1">•</span>
+                                      <span>{strength}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Risk Mitigation</h5>
+                                <ul className="text-sm text-gray-700 space-y-1">
+                                  {cro.riskMitigation.map((risk, index) => (
+                                    <li key={index} className="flex items-start gap-2">
+                                      <span className="text-blue-500 mt-1">•</span>
+                                      <span>{risk}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Implementation Timeline</h5>
+                                <p className="text-sm text-gray-700">{cro.implementationTimeline}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CMC Risk Tab Content */}
+              {activeTab === 'CMC Risk' && (
+                <div className="space-y-6">
+                  {/* CMC Risk Analysis Header */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-semibold leading-none tracking-tight">
+                            CMC Risk Analysis
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Chemistry, Manufacturing & Controls assessment for {analysis?.drugName || 'drug product'} with validated outcomes
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-24 h-24">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={276.46}
+                                strokeDashoffset={276.46 - (276.46 * 45 / 100)}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 ease-in-out"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-bold text-gray-900 text-xl">45</span>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-1">Risk Score</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-4">
+                        {typeof analysis?.manufacturing === 'string' ? analysis.manufacturing : 'Risk assessment based on molecular properties and manufacturing requirements. Manufacturing considerations include supply chain dependencies, quality control protocols, and regulatory compliance requirements.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Manufacturing Risk Factors & Mitigations */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Manufacturing Risk Factors & Mitigations
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Click each factor to view detailed analysis, mitigation strategies, and validation outcomes
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-4">
+                      {manufacturingRisks.map((risk) => (
+                        <div
+                          key={risk.name}
+                          className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(risk.name)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <h4 className="font-medium text-gray-900">{risk.name}</h4>
+                                <p className="text-sm text-gray-600 mt-1">{risk.description}</p>
+                              </div>
+                            </div>
+                            <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[risk.name] && "rotate-180")} />
+                          </div>
+                          
+                          {expandedComponents[risk.name] && (
+                            <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-700">{risk.detailedAnalysis}</p>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Operational Impact</h5>
+                                <p className="text-sm text-gray-700">{risk.operationalImpact}</p>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Recommendations</h5>
+                                <ul className="text-sm text-gray-700 space-y-1">
+                                  {risk.recommendations.map((rec, index) => (
+                                    <li key={index} className="flex items-start gap-2">
+                                      <span className="text-blue-500 mt-1">•</span>
+                                      <span>{rec}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Data Sources</h5>
+                                <ul className="text-sm text-gray-700 space-y-1">
+                                  {risk.dataSources.map((source, index) => (
+                                    <li key={index} className="flex items-start gap-2">
+                                      <span className="text-gray-400 mt-1">•</span>
+                                      <span>{source}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trial Design Tab Content */}
+              {activeTab === 'Trial Design' && (
+                <div className="space-y-6">
+                  {/* Trial Design Complexity Assessment */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-semibold leading-none tracking-tight">
+                            Trial Design Complexity Assessment
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {analysis?.clinicalInfo?.studyDesign || 'Protocol optimization with validated efficacy outcomes'}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-24 h-24">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={276.46}
+                                strokeDashoffset={276.46 - (276.46 * 42 / 100)}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 ease-in-out"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-bold text-gray-900 text-xl">42</span>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-1">Risk Score</span>
+                        </div>
+                      </div>
+                      
+                      {/* KPI Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                        <div className="bg-gray-50 rounded-lg p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.trialMetrics?.countries || 15}</div>
+                          <div className="text-sm text-gray-600">Countries</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.trialMetrics?.sites || 85}</div>
+                          <div className="text-sm text-gray-600">Sites</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.trialMetrics?.duration || '24 months'}</div>
+                          <div className="text-sm text-gray-600">Duration</div>
+                        </div>
+                      </div>
+                      
+                      {/* Key Explanations */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-2">Primary Endpoint</h4>
+                          <p className="text-sm text-gray-700">
+                            {analysis?.clinicalInfo?.primaryEndpoint || 'Primary endpoint based on molecular mechanism and therapeutic target'}
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-2">Patient Population</h4>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 mb-1">Target Population</div>
+                            <p className="text-sm text-gray-700">
+                              {analysis?.clinicalInfo?.patientPopulation || 'Patient population based on molecular characteristics and therapeutic indication'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Protocol Component Analysis */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Protocol Component Analysis
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Click each component for detailed optimization strategy and validation outcomes
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-4">
+                      {trialDesignComponents.map((component) => (
+                        <div
+                          key={component.name}
+                          className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(component.name)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <h4 className="font-medium text-gray-900">{component.name}</h4>
+                                <p className="text-sm text-gray-600 mt-1">{component.description}</p>
+                              </div>
+                            </div>
+                            <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[component.name] && "rotate-180")} />
+                          </div>
+                          
+                          {expandedComponents[component.name] && (
+                            <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-700">{component.detailedAnalysis}</p>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Operational Impact</h5>
+                                <p className="text-sm text-gray-700">{component.operationalImpact}</p>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Data Sources</h5>
+                                <ul className="text-sm text-gray-700 space-y-1">
+                                  {component.dataSources.map((source, index) => (
+                                    <li key={index} className="flex items-start gap-2">
+                                      <span className="text-gray-400 mt-1">•</span>
+                                      <span>{source}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Site Readiness Tab Content */}
+              {activeTab === 'Site Readiness' && (
+                <div className="space-y-6">
+                  {/* Site Readiness Assessment */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-semibold leading-none tracking-tight">
+                            Site Readiness Assessment
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Comprehensive evaluation of site network capabilities and activation readiness
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-24 h-24">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={276.46}
+                                strokeDashoffset={276.46 - (276.46 * 71 / 100)}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 ease-in-out"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-bold text-gray-900 text-xl">71</span>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-1">Risk Score</span>
+                        </div>
+                      </div>
+                      
+                      {/* Key Metric Cards */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.trialMetrics?.sites || 85}</div>
+                          <div className="text-sm text-gray-600">Total Sites</div>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.trialMetrics?.countries || 15}</div>
+                          <div className="text-sm text-gray-600">Countries</div>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.trialMetrics?.duration || '24 months'}</div>
+                          <div className="text-sm text-gray-600">Duration</div>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.riskAssessment?.overallScore || 65}/100</div>
+                          <div className="text-sm text-gray-600">Risk Score</div>
+                        </div>
+                      </div>
+                      
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                        <div className="bg-white rounded-lg border p-4">
+                          <h4 className="font-medium text-gray-900 mb-2">Site Performance History</h4>
+                          <div className="text-sm font-medium text-gray-900 mb-1">30% Underperforming</div>
+                          <p className="text-sm text-gray-700">
+                            12 of 40 planned sites historically underperformed vs oncology/respiratory benchmarks with slow enrollment and protocol deviations.
+                          </p>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4">
+                          <h4 className="font-medium text-gray-900 mb-2">IRB/EC Approval Timeline Variability</h4>
+                          <div className="text-sm font-medium text-gray-900 mb-1">75 days average</div>
+                          <p className="text-sm text-gray-700">
+                            Significant regional variation in ethics approval timelines creating staggered activation and enrollment imbalance.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Readiness Factor Analysis */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        Readiness Factor Analysis
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Click each factor for detailed assessment, regional breakdown, and mitigation strategies
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-4">
+                      {siteReadinessFactors.map((factor) => (
+                        <div
+                          key={factor.name}
+                          className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors cursor-pointer"
+                          onClick={() => toggleComponent(factor.name)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <h4 className="font-medium text-gray-900">{factor.name}</h4>
+                                <p className="text-sm text-gray-600 mt-1">{factor.description}</p>
+                              </div>
+                            </div>
+                            <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", expandedComponents[factor.name] && "rotate-180")} />
+                          </div>
+                          
+                          {expandedComponents[factor.name] && (
+                            <div className="mt-4 space-y-4 pt-4 border-t border-gray-100">
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Detailed Analysis</h5>
+                                <p className="text-sm text-gray-700">{factor.detailedAnalysis}</p>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Operational Impact</h5>
+                                <p className="text-sm text-gray-700">{factor.operationalImpact}</p>
+                              </div>
+                              
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-2">Data Sources</h5>
+                                <ul className="text-sm text-gray-700 space-y-1">
+                                  {factor.dataSources.map((source, index) => (
+                                    <li key={index} className="flex items-start gap-2">
+                                      <span className="text-gray-400 mt-1">•</span>
+                                      <span>{source}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* External Factors Tab Content */}
+              {activeTab === 'External Factors' && (
+                <div className="space-y-6">
+                  {/* External Risk Factor Assessment */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-semibold leading-none tracking-tight">
+                            External Risk Factor Assessment
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Monitoring of external factors including regulatory landscape signals that could impact trial execution
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className="relative w-24 h-24">
+                            <svg className="transform -rotate-90 w-full h-full" viewBox="0 0 120 120">
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#e5e7eb"
+                                strokeWidth="8"
+                                fill="none"
+                              />
+                              <circle
+                                cx="60"
+                                cy="60"
+                                r="44"
+                                stroke="#374151"
+                                strokeWidth="8"
+                                fill="none"
+                                strokeDasharray={276.46}
+                                strokeDashoffset={276.46 - (276.46 * 23 / 100)}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 ease-in-out"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-bold text-gray-900 text-xl">23</span>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-600 mt-1">Risk Score</span>
+                        </div>
+                      </div>
+                      
+                      {/* Key Metric Cards */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.externalFactors?.externalRiskScore || 23}/100</div>
+                          <div className="text-sm text-gray-600">Overall Risk Score</div>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.externalFactors?.countriesMonitored || 15}</div>
+                          <div className="text-sm text-gray-600">Countries Monitored</div>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.externalFactors?.activeAlerts || 5}</div>
+                          <div className="text-sm text-gray-600">Active Alerts</div>
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900">{analysis?.externalFactors?.disruptionRisk || "Low"}</div>
+                          <div className="text-sm text-gray-600">Disruption Risk</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* External Factor Analysis */}
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                    <div className="flex flex-col space-y-1.5 p-6">
+                      <div className="text-2xl font-semibold leading-none tracking-tight">
+                        External Factor Analysis
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Click each factor for detailed risk assessment, regulatory signals, and contingency planning
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0 space-y-4">
+                      {/* Dynamic External Factors Analysis */}
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <h4 className="font-medium text-gray-900">Geopolitical Risk Assessment</h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {analysis?.externalFactors?.geopoliticalRisk || "Stable geopolitical environment in most target markets"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <h4 className="font-medium text-gray-900">Supply Chain Disruption Risk</h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {analysis?.externalFactors?.supplyChainRisk || "Moderate supply chain vulnerabilities"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <h4 className="font-medium text-gray-900">Regulatory Environment Changes</h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {analysis?.externalFactors?.regulatoryRisk || "Stable regulatory environment"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <h4 className="font-medium text-gray-900">FDA Updates</h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {analysis?.externalFactors?.fdaUpdates || "Standard regulatory updates"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <h4 className="font-medium text-gray-900">EMA Updates</h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {analysis?.externalFactors?.emaUpdates || "Standard regulatory updates"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Other tabs would show different content */}
+              {activeTab !== 'Overview' && activeTab !== 'Digital Twin' && activeTab !== 'CRO Analysis' && activeTab !== 'CMC Risk' && activeTab !== 'Trial Design' && activeTab !== 'Site Readiness' && activeTab !== 'External Factors' && (
+                <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+                  <div className="text-center text-gray-500">
+                    <p>Content for {activeTab} tab would be displayed here.</p>
+                    <p className="text-sm mt-2">This would include detailed analysis, charts, and recommendations specific to this area.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+} 
